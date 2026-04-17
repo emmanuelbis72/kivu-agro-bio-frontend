@@ -125,8 +125,68 @@ export default function InvoicesPage() {
     });
   }
 
+  const selectedCustomer = useMemo(() => {
+    if (!form.customer_id) return null;
+
+    return (
+      customers.find(
+        (customer) => Number(customer.id) === Number(form.customer_id)
+      ) || null
+    );
+  }, [customers, form.customer_id]);
+
+  const selectedCustomerWarehouseId = useMemo(() => {
+    if (!selectedCustomer?.warehouse_id) return "";
+
+    return String(selectedCustomer.warehouse_id);
+  }, [selectedCustomer]);
+
+  const availableWarehouses = useMemo(() => {
+    if (!selectedCustomerWarehouseId) {
+      return warehouses;
+    }
+
+    return warehouses.filter(
+      (warehouse) => String(warehouse.id) === selectedCustomerWarehouseId
+    );
+  }, [warehouses, selectedCustomerWarehouseId]);
+
+  useEffect(() => {
+    if (!form.customer_id) {
+      setForm((prev) => ({
+        ...prev,
+        warehouse_id: ""
+      }));
+      return;
+    }
+
+    if (!selectedCustomerWarehouseId) {
+      return;
+    }
+
+    setForm((prev) => {
+      if (String(prev.warehouse_id) === String(selectedCustomerWarehouseId)) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        warehouse_id: String(selectedCustomerWarehouseId)
+      };
+    });
+  }, [form.customer_id, selectedCustomerWarehouseId]);
+
   function handleFormChange(event) {
     const { name, value } = event.target;
+
+    if (name === "customer_id") {
+      setForm((prev) => ({
+        ...prev,
+        customer_id: value
+      }));
+      return;
+    }
+
     setForm((prev) => ({
       ...prev,
       [name]: value
@@ -254,11 +314,15 @@ export default function InvoicesPage() {
         );
       } else if (accounting?.status === "skipped") {
         setSuccessMessage(
-          `Facture créée avec succès. Comptabilisation ignorée : ${accounting.reason || "paramétrage manquant"}.`
+          `Facture créée avec succès. Comptabilisation ignorée : ${
+            accounting.reason || "paramétrage manquant"
+          }.`
         );
       } else if (accounting?.status === "error") {
         setSuccessMessage(
-          `Facture créée avec succès. Comptabilisation en erreur : ${accounting.reason || "erreur inconnue"}.`
+          `Facture créée avec succès. Comptabilisation en erreur : ${
+            accounting.reason || "erreur inconnue"
+          }.`
         );
       } else {
         setSuccessMessage("Facture créée avec succès.");
@@ -366,15 +430,26 @@ export default function InvoicesPage() {
                 name="warehouse_id"
                 value={form.warehouse_id}
                 onChange={handleFormChange}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                disabled={Boolean(selectedCustomerWarehouseId)}
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500 disabled:bg-slate-100 disabled:text-slate-500"
               >
                 <option value="">Sélectionner</option>
-                {warehouses.map((warehouse) => (
+                {availableWarehouses.map((warehouse) => (
                   <option key={warehouse.id} value={warehouse.id}>
                     {warehouse.name} - {warehouse.city}
                   </option>
                 ))}
               </select>
+
+              {selectedCustomerWarehouseId ? (
+                <p className="mt-2 text-xs text-slate-500">
+                  Dépôt affecté automatiquement selon le point de vente sélectionné.
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-amber-600">
+                  Aucun dépôt lié trouvé pour ce client. Sélection manuelle requise.
+                </p>
+              )}
             </div>
 
             <div>
