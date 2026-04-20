@@ -7,6 +7,7 @@ import MainLayout from "./components/layout/MainLayout";
 import DashboardPage from "./pages/DashboardPage";
 import AccountingDashboardPage from "./pages/AccountingDashboardPage";
 import AIReasoningPage from "./pages/AIReasoningPage";
+import AIScoringDashboardPage from "./pages/AIScoringDashboardPage";
 import AIBusinessRulesPage from "./pages/AIBusinessRulesPage";
 import ProductsPage from "./pages/ProductsPage";
 import WarehousesPage from "./pages/WarehousesPage";
@@ -62,6 +63,7 @@ export default function App() {
           <Route path="balance-sheet" element={<BalanceSheetPage />} />
 
           <Route path="ai-reasoning" element={<AIReasoningPage />} />
+          <Route path="ai-scoring" element={<AIScoringDashboardPage />} />
           <Route path="ai-business-rules" element={<AIBusinessRulesPage />} />
           <Route path="kabot" element={<KabotDashboardPage />} />
           <Route
