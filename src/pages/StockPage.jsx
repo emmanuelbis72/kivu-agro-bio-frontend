@@ -7,6 +7,7 @@ const entryInitial = {
   warehouse_id: "",
   product_id: "",
   quantity: "",
+  quantity_unit: "unit",
   unit_cost: "",
   reference_type: "manual",
   notes: ""
@@ -16,6 +17,7 @@ const exitInitial = {
   warehouse_id: "",
   product_id: "",
   quantity: "",
+  quantity_unit: "unit",
   unit_cost: "",
   reference_type: "manual",
   notes: ""
@@ -25,6 +27,7 @@ const adjustmentInitial = {
   warehouse_id: "",
   product_id: "",
   new_quantity: "",
+  quantity_unit: "unit",
   unit_cost: "",
   reference_type: "manual",
   notes: ""
@@ -44,6 +47,97 @@ const transferInitial = {
   notes: "",
   items: [{ ...transferItemInitial }]
 };
+
+function normalizeUnit(value, fallback = "unit") {
+  const unit = String(value || fallback).trim().toLowerCase();
+  return unit || fallback;
+}
+
+function getAllowedInputUnits(product) {
+  const stockUnit = normalizeUnit(product?.stock_unit, "unit");
+
+  if (stockUnit === "g") {
+    return [
+      { value: "g", label: "g" },
+      { value: "kg", label: "kg" }
+    ];
+  }
+
+  if (stockUnit === "ml") {
+    return [
+      { value: "ml", label: "ml" },
+      { value: "l", label: "l" }
+    ];
+  }
+
+  if (stockUnit === "kg") {
+    return [
+      { value: "kg", label: "kg" },
+      { value: "g", label: "g" }
+    ];
+  }
+
+  if (stockUnit === "l") {
+    return [
+      { value: "l", label: "l" },
+      { value: "ml", label: "ml" }
+    ];
+  }
+
+  return [{ value: "unit", label: "unit" }];
+}
+
+function getProductLabel(product) {
+  if (!product) return "";
+
+  const pack =
+    product.product_type === "finished_product" &&
+    product.pack_size &&
+    product.pack_unit
+      ? ` - ${product.pack_size} ${product.pack_unit}`
+      : "";
+
+  return `${product.name} (${product.sku})${pack}`;
+}
+
+function getStockDisplay(row) {
+  const quantity = Number(row.quantity || 0);
+  const stockUnit = row.stock_unit || "unit";
+
+  return `${quantity} ${stockUnit}`;
+}
+
+function getPackDisplay(product) {
+  if (
+    product?.product_type === "finished_product" &&
+    product?.pack_size &&
+    product?.pack_unit
+  ) {
+    return `${product.pack_size} ${product.pack_unit}`;
+  }
+
+  return "-";
+}
+
+function getInputHint(product) {
+  if (!product) {
+    return "Sélectionne d’abord un produit.";
+  }
+
+  if (product.product_type === "raw_material") {
+    return `Matière première : saisis la quantité en ${getAllowedInputUnits(product)
+      .map((item) => item.value)
+      .join(" / ")}. Le stock est conservé en ${product.stock_unit}.`;
+  }
+
+  if (product.product_type === "finished_product") {
+    return `Produit fini : saisis le nombre d’unités vendables (paquets / bouteilles). Format commercial : ${getPackDisplay(
+      product
+    )}.`;
+  }
+
+  return `Emballage / consommable : saisis la quantité en ${product.stock_unit}.`;
+}
 
 export default function StockPage() {
   const [warehouses, setWarehouses] = useState([]);
@@ -71,6 +165,23 @@ export default function StockPage() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
+  const entryProduct = useMemo(
+    () => products.find((item) => Number(item.id) === Number(entryForm.product_id)) || null,
+    [products, entryForm.product_id]
+  );
+
+  const exitProduct = useMemo(
+    () => products.find((item) => Number(item.id) === Number(exitForm.product_id)) || null,
+    [products, exitForm.product_id]
+  );
+
+  const adjustmentProduct = useMemo(
+    () =>
+      products.find((item) => Number(item.id) === Number(adjustmentForm.product_id)) ||
+      null,
+    [products, adjustmentForm.product_id]
+  );
+
   async function fetchInitialData() {
     try {
       setLoading(true);
@@ -96,7 +207,11 @@ export default function StockPage() {
       setMovements(movementsRes.data.data || []);
       setTransfers(transfersRes.data.data || []);
     } catch (err) {
-      setError(err?.message || "Impossible de charger les données de stock.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de charger les données de stock."
+      );
     } finally {
       setLoading(false);
     }
@@ -117,7 +232,11 @@ export default function StockPage() {
       const response = await api.get(`/stock/warehouse/${warehouseId}`);
       setStockRows(response.data.data || []);
     } catch (err) {
-      setError(err?.message || "Impossible de charger le stock du dépôt.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de charger le stock du dépôt."
+      );
     }
   }
 
@@ -127,7 +246,9 @@ export default function StockPage() {
       setMovements(response.data.data || []);
     } catch (err) {
       setError(
-        err?.message || "Impossible de charger les mouvements de stock."
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de charger les mouvements de stock."
       );
     }
   }
@@ -137,7 +258,11 @@ export default function StockPage() {
       const response = await api.get("/stock/transfers");
       setTransfers(response.data.data || []);
     } catch (err) {
-      setError(err?.message || "Impossible de charger les transferts.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de charger les transferts."
+      );
     }
   }
 
@@ -149,7 +274,11 @@ export default function StockPage() {
       const response = await api.get(`/stock/transfers/${transferId}`);
       setSelectedTransfer(response.data.data || null);
     } catch (err) {
-      setError(err?.message || "Impossible de charger le détail du transfert.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de charger le détail du transfert."
+      );
     } finally {
       setTransferDetailsLoading(false);
     }
@@ -160,18 +289,49 @@ export default function StockPage() {
     fetchStockByWarehouse(value);
   }
 
+  function applyProductUnitToForm(productId, setter, fieldName = "quantity_unit") {
+    const product =
+      products.find((item) => Number(item.id) === Number(productId)) || null;
+
+    const defaultUnit = getAllowedInputUnits(product)[0]?.value || "unit";
+
+    setter((prev) => ({
+      ...prev,
+      product_id: productId,
+      [fieldName]: defaultUnit
+    }));
+  }
+
   function handleEntryChange(event) {
     const { name, value } = event.target;
+
+    if (name === "product_id") {
+      applyProductUnitToForm(value, setEntryForm);
+      return;
+    }
+
     setEntryForm((prev) => ({ ...prev, [name]: value }));
   }
 
   function handleExitChange(event) {
     const { name, value } = event.target;
+
+    if (name === "product_id") {
+      applyProductUnitToForm(value, setExitForm);
+      return;
+    }
+
     setExitForm((prev) => ({ ...prev, [name]: value }));
   }
 
   function handleAdjustmentChange(event) {
     const { name, value } = event.target;
+
+    if (name === "product_id") {
+      applyProductUnitToForm(value, setAdjustmentForm);
+      return;
+    }
+
     setAdjustmentForm((prev) => ({ ...prev, [name]: value }));
   }
 
@@ -238,6 +398,7 @@ export default function StockPage() {
         warehouse_id: Number(entryForm.warehouse_id),
         product_id: Number(entryForm.product_id),
         quantity: Number(entryForm.quantity),
+        quantity_unit: entryForm.quantity_unit,
         unit_cost: entryForm.unit_cost === "" ? 0 : Number(entryForm.unit_cost),
         reference_type: entryForm.reference_type,
         notes: entryForm.notes.trim()
@@ -249,7 +410,11 @@ export default function StockPage() {
       await fetchStockByWarehouse(selectedWarehouse);
       await fetchMovements();
     } catch (err) {
-      setError(err?.message || "Erreur lors de l’entrée de stock.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Erreur lors de l’entrée de stock."
+      );
     } finally {
       setSubmitLoading(false);
     }
@@ -267,6 +432,7 @@ export default function StockPage() {
         warehouse_id: Number(exitForm.warehouse_id),
         product_id: Number(exitForm.product_id),
         quantity: Number(exitForm.quantity),
+        quantity_unit: exitForm.quantity_unit,
         unit_cost: exitForm.unit_cost === "" ? 0 : Number(exitForm.unit_cost),
         reference_type: exitForm.reference_type,
         notes: exitForm.notes.trim()
@@ -278,7 +444,11 @@ export default function StockPage() {
       await fetchStockByWarehouse(selectedWarehouse);
       await fetchMovements();
     } catch (err) {
-      setError(err?.message || "Erreur lors de la sortie de stock.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Erreur lors de la sortie de stock."
+      );
     } finally {
       setSubmitLoading(false);
     }
@@ -296,6 +466,7 @@ export default function StockPage() {
         warehouse_id: Number(adjustmentForm.warehouse_id),
         product_id: Number(adjustmentForm.product_id),
         new_quantity: Number(adjustmentForm.new_quantity),
+        quantity_unit: adjustmentForm.quantity_unit,
         unit_cost:
           adjustmentForm.unit_cost === ""
             ? 0
@@ -310,7 +481,11 @@ export default function StockPage() {
       await fetchStockByWarehouse(selectedWarehouse);
       await fetchMovements();
     } catch (err) {
-      setError(err?.message || "Erreur lors de l’ajustement de stock.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Erreur lors de l’ajustement de stock."
+      );
     } finally {
       setSubmitLoading(false);
     }
@@ -366,7 +541,11 @@ export default function StockPage() {
         await handleLoadTransferDetails(response.data.data.id);
       }
     } catch (err) {
-      setError(err?.message || "Erreur lors du transfert inter-dépôts.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Erreur lors du transfert inter-dépôts."
+      );
     } finally {
       setSubmitLoading(false);
     }
@@ -385,7 +564,9 @@ export default function StockPage() {
         row.sku,
         row.category,
         row.warehouse_name,
-        row.warehouse_city
+        row.warehouse_city,
+        row.product_type,
+        row.stock_unit
       ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(keyword))
@@ -407,7 +588,9 @@ export default function StockPage() {
         row.warehouse_city,
         row.movement_type,
         row.reference_type,
-        row.notes
+        row.notes,
+        row.product_type,
+        row.stock_unit
       ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(keyword))
@@ -442,7 +625,9 @@ export default function StockPage() {
       OUT: "bg-red-100 text-red-700",
       ADJUSTMENT: "bg-blue-100 text-blue-700",
       TRANSFER_IN: "bg-emerald-100 text-emerald-700",
-      TRANSFER_OUT: "bg-orange-100 text-orange-700"
+      TRANSFER_OUT: "bg-orange-100 text-orange-700",
+      PRODUCTION_CONSUME: "bg-amber-100 text-amber-700",
+      PRODUCTION_OUTPUT: "bg-emerald-100 text-emerald-700"
     };
 
     return map[type] || "bg-slate-100 text-slate-700";
@@ -455,6 +640,38 @@ export default function StockPage() {
     };
 
     return map[status] || "bg-slate-100 text-slate-700";
+  }
+
+  function renderQuantityUnitField(form, onChange, product, name = "quantity_unit") {
+    const allowed = getAllowedInputUnits(product);
+
+    return (
+      <div>
+        <label className="mb-2 block text-sm font-medium text-slate-700">
+          Unité de saisie *
+        </label>
+        <select
+          name={name}
+          value={form[name]}
+          onChange={onChange}
+          className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+        >
+          {allowed.map((item) => (
+            <option key={item.value} value={item.value}>
+              {item.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  function renderProductHint(product) {
+    return (
+      <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        {getInputHint(product)}
+      </div>
+    );
   }
 
   function renderStockForm() {
@@ -496,7 +713,7 @@ export default function StockPage() {
               <option value="">Sélectionner</option>
               {products.map((product) => (
                 <option key={product.id} value={product.id}>
-                  {product.name} ({product.sku})
+                  {getProductLabel(product)}
                 </option>
               ))}
             </select>
@@ -508,14 +725,17 @@ export default function StockPage() {
             </label>
             <input
               type="number"
-              min="1"
+              min="0"
+              step="0.01"
               name="quantity"
               value={entryForm.quantity}
               onChange={handleEntryChange}
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-              placeholder="100"
+              placeholder="Ex: 25"
             />
           </div>
+
+          {renderQuantityUnitField(entryForm, handleEntryChange, entryProduct)}
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -549,6 +769,8 @@ export default function StockPage() {
               <option value="initial_stock">initial_stock</option>
             </select>
           </div>
+
+          {renderProductHint(entryProduct)}
 
           <div className="md:col-span-2 xl:col-span-3">
             <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -615,7 +837,7 @@ export default function StockPage() {
               <option value="">Sélectionner</option>
               {products.map((product) => (
                 <option key={product.id} value={product.id}>
-                  {product.name} ({product.sku})
+                  {getProductLabel(product)}
                 </option>
               ))}
             </select>
@@ -627,14 +849,17 @@ export default function StockPage() {
             </label>
             <input
               type="number"
-              min="1"
+              min="0"
+              step="0.01"
               name="quantity"
               value={exitForm.quantity}
               onChange={handleExitChange}
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-              placeholder="10"
+              placeholder="Ex: 10"
             />
           </div>
+
+          {renderQuantityUnitField(exitForm, handleExitChange, exitProduct)}
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -668,6 +893,8 @@ export default function StockPage() {
               <option value="loss">loss</option>
             </select>
           </div>
+
+          {renderProductHint(exitProduct)}
 
           <div className="md:col-span-2 xl:col-span-3">
             <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -734,7 +961,7 @@ export default function StockPage() {
               <option value="">Sélectionner</option>
               {products.map((product) => (
                 <option key={product.id} value={product.id}>
-                  {product.name} ({product.sku})
+                  {getProductLabel(product)}
                 </option>
               ))}
             </select>
@@ -747,13 +974,20 @@ export default function StockPage() {
             <input
               type="number"
               min="0"
+              step="0.01"
               name="new_quantity"
               value={adjustmentForm.new_quantity}
               onChange={handleAdjustmentChange}
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-              placeholder="50"
+              placeholder="Ex: 50"
             />
           </div>
+
+          {renderQuantityUnitField(
+            adjustmentForm,
+            handleAdjustmentChange,
+            adjustmentProduct
+          )}
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -786,6 +1020,8 @@ export default function StockPage() {
               <option value="correction">correction</option>
             </select>
           </div>
+
+          {renderProductHint(adjustmentProduct)}
 
           <div className="md:col-span-2 xl:col-span-3">
             <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -916,7 +1152,7 @@ export default function StockPage() {
                     <option value="">Sélectionner</option>
                     {products.map((product) => (
                       <option key={product.id} value={product.id}>
-                        {product.name} ({product.sku})
+                        {getProductLabel(product)}
                       </option>
                     ))}
                   </select>
@@ -928,7 +1164,8 @@ export default function StockPage() {
                   </label>
                   <input
                     type="number"
-                    min="1"
+                    min="0"
+                    step="0.01"
                     value={item.quantity}
                     onChange={(e) =>
                       handleTransferItemChange(index, "quantity", e.target.value)
@@ -996,11 +1233,19 @@ export default function StockPage() {
     );
   }
 
+  if (loading) {
+    return (
+      <div className="rounded-3xl border border-slate-100 bg-white p-8 shadow-soft text-sm text-slate-500">
+        Chargement des données de stock...
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <SectionTitle
         title="Stock"
-        subtitle="Gestion des niveaux de stock, entrées, sorties, ajustements et transferts inter-dépôts"
+        subtitle="Gestion intelligente du stock : vrac en dépôt, produits finis, ajustements et transferts"
       />
 
       {error ? (
@@ -1017,49 +1262,24 @@ export default function StockPage() {
 
       <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
         <div className="mb-5 flex flex-wrap gap-3">
-          <button
-            onClick={() => setActiveTab("entry")}
-            className={`rounded-2xl px-4 py-3 text-sm font-semibold ${
-              activeTab === "entry"
-                ? "bg-brand-600 text-white"
-                : "border border-slate-300 text-slate-700"
-            }`}
-          >
-            Entrée stock
-          </button>
-
-          <button
-            onClick={() => setActiveTab("exit")}
-            className={`rounded-2xl px-4 py-3 text-sm font-semibold ${
-              activeTab === "exit"
-                ? "bg-brand-600 text-white"
-                : "border border-slate-300 text-slate-700"
-            }`}
-          >
-            Sortie stock
-          </button>
-
-          <button
-            onClick={() => setActiveTab("adjustment")}
-            className={`rounded-2xl px-4 py-3 text-sm font-semibold ${
-              activeTab === "adjustment"
-                ? "bg-brand-600 text-white"
-                : "border border-slate-300 text-slate-700"
-            }`}
-          >
-            Ajustement
-          </button>
-
-          <button
-            onClick={() => setActiveTab("transfer")}
-            className={`rounded-2xl px-4 py-3 text-sm font-semibold ${
-              activeTab === "transfer"
-                ? "bg-brand-600 text-white"
-                : "border border-slate-300 text-slate-700"
-            }`}
-          >
-            Transfert inter-dépôts
-          </button>
+          {[
+            ["entry", "Entrée stock"],
+            ["exit", "Sortie stock"],
+            ["adjustment", "Ajustement"],
+            ["transfer", "Transfert inter-dépôts"]
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`rounded-2xl px-4 py-3 text-sm font-semibold ${
+                activeTab === key
+                  ? "bg-brand-600 text-white"
+                  : "border border-slate-300 text-slate-700"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         {renderStockForm()}
@@ -1087,74 +1307,44 @@ export default function StockPage() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4 mb-6">
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <div className="text-sm text-slate-500">Date</div>
-              <div className="mt-2 text-lg font-bold text-slate-900">
-                {selectedTransfer.transfer_date}
-              </div>
+          {transferDetailsLoading ? (
+            <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+              Chargement du détail du transfert...
             </div>
-
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <div className="text-sm text-slate-500">Statut</div>
-              <div className="mt-2">
-                <span
-                  className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getTransferStatusBadge(
-                    selectedTransfer.status
-                  )}`}
-                >
-                  {selectedTransfer.status}
-                </span>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <div className="text-sm text-slate-500">Source</div>
-              <div className="mt-2 text-lg font-bold text-slate-900">
-                {selectedTransfer.source_warehouse_name}
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <div className="text-sm text-slate-500">Destination</div>
-              <div className="mt-2 text-lg font-bold text-slate-900">
-                {selectedTransfer.destination_warehouse_name}
-              </div>
-            </div>
-          </div>
-
-          {selectedTransfer.notes ? (
-            <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-              <span className="font-semibold">Notes :</span> {selectedTransfer.notes}
-            </div>
-          ) : null}
-
-          <TableCard
-            title={`Lignes du transfert (${selectedTransfer.items?.length || 0})`}
-            rows={selectedTransfer.items || []}
-            emptyText="Aucune ligne de transfert"
-            columns={[
-              { key: "product_name", label: "Produit" },
-              { key: "sku", label: "SKU" },
-              { key: "quantity", label: "Quantité" },
-              { key: "unit", label: "Unité" },
-              { key: "unit_cost", label: "Coût unitaire" }
-            ]}
-          />
+          ) : (
+            <TableCard
+              title={`Lignes du transfert (${selectedTransfer.items?.length || 0})`}
+              rows={selectedTransfer.items || []}
+              emptyText="Aucune ligne de transfert"
+              columns={[
+                { key: "product_name", label: "Produit" },
+                { key: "sku", label: "SKU" },
+                {
+                  key: "quantity",
+                  label: "Quantité",
+                  render: (row) => `${row.quantity} ${row.stock_unit || row.unit || "unit"}`
+                },
+                {
+                  key: "unit_cost",
+                  label: "Coût unitaire"
+                }
+              ]}
+            />
+          )}
         </div>
       ) : null}
 
       <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="mb-5 flex flex-wrap items-center gap-3 justify-between">
           <div className="text-lg font-semibold text-slate-900">
-            État du stock
+            Stock par dépôt
           </div>
 
-          <div className="flex flex-col gap-3 md:flex-row">
+          <div className="flex flex-wrap gap-3">
             <select
               value={selectedWarehouse}
               onChange={(e) => handleWarehouseFilterChange(e.target.value)}
-              className="w-full md:w-72 rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+              className="rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-brand-500"
             >
               <option value="">Tous les dépôts</option>
               {warehouses.map((warehouse) => (
@@ -1167,183 +1357,136 @@ export default function StockPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher dans le stock..."
-              className="w-full md:w-80 rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+              className="rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-brand-500"
+              placeholder="Rechercher produit / dépôt"
             />
           </div>
         </div>
 
-        <div className="mt-6">
-          {loading ? (
-            <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-              Chargement du stock...
-            </div>
-          ) : (
-            <TableCard
-              title={`Stock (${filteredStockRows.length})`}
-              rows={filteredStockRows}
-              emptyText="Aucune donnée de stock"
-              columns={[
-                { key: "product_name", label: "Produit" },
-                { key: "sku", label: "SKU" },
-                { key: "category", label: "Catégorie" },
-                { key: "warehouse_name", label: "Dépôt" },
-                { key: "warehouse_city", label: "Ville" },
-                { key: "quantity", label: "Stock" },
-                { key: "unit", label: "Unité" },
-                {
-                  key: "alert_threshold",
-                  label: "Seuil",
-                  render: (row) => (
-                    <span
-                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                        Number(row.quantity) <= Number(row.alert_threshold)
-                          ? "bg-red-100 text-red-700"
-                          : "bg-slate-100 text-slate-700"
-                      }`}
-                    >
-                      {row.alert_threshold}
-                    </span>
-                  )
-                }
-              ]}
-            />
-          )}
-        </div>
+        <TableCard
+          title={`Stock visible (${filteredStockRows.length})`}
+          rows={filteredStockRows}
+          emptyText="Aucune ligne de stock"
+          columns={[
+            { key: "product_name", label: "Produit" },
+            { key: "sku", label: "SKU" },
+            { key: "product_type", label: "Type" },
+            {
+              key: "pack",
+              label: "Format",
+              render: (row) =>
+                row.product_type === "finished_product" && row.pack_size && row.pack_unit
+                  ? `${row.pack_size} ${row.pack_unit}`
+                  : "-"
+            },
+            { key: "warehouse_name", label: "Dépôt" },
+            { key: "warehouse_city", label: "Ville" },
+            {
+              key: "quantity",
+              label: "Stock réel",
+              render: (row) => getStockDisplay(row)
+            }
+          ]}
+        />
       </div>
 
       <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="mb-5 flex flex-wrap items-center gap-3 justify-between">
           <div className="text-lg font-semibold text-slate-900">
-            Historique des transferts
-          </div>
-
-          <input
-            value={transferSearch}
-            onChange={(e) => setTransferSearch(e.target.value)}
-            placeholder="Rechercher un transfert..."
-            className="w-full md:w-80 rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-          />
-        </div>
-
-        <div className="mt-6">
-          {loading ? (
-            <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-              Chargement des transferts...
-            </div>
-          ) : (
-            <TableCard
-              title={`Transferts (${filteredTransfers.length})`}
-              rows={filteredTransfers}
-              emptyText="Aucun transfert inter-dépôts"
-              columns={[
-                {
-                  key: "transfer_number",
-                  label: "N° transfert",
-                  render: (row) => (
-                    <button
-                      type="button"
-                      onClick={() => handleLoadTransferDetails(row.id)}
-                      className="font-semibold text-brand-700 hover:underline"
-                    >
-                      {row.transfer_number}
-                    </button>
-                  )
-                },
-                {
-                  key: "source_warehouse_name",
-                  label: "Source",
-                  render: (row) =>
-                    `${row.source_warehouse_name} - ${row.source_warehouse_city}`
-                },
-                {
-                  key: "destination_warehouse_name",
-                  label: "Destination",
-                  render: (row) =>
-                    `${row.destination_warehouse_name} - ${row.destination_warehouse_city}`
-                },
-                { key: "transfer_date", label: "Date" },
-                {
-                  key: "status",
-                  label: "Statut",
-                  render: (row) => (
-                    <span
-                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getTransferStatusBadge(
-                        row.status
-                      )}`}
-                    >
-                      {row.status}
-                    </span>
-                  )
-                },
-                { key: "items_count", label: "Lignes" },
-                { key: "total_quantity", label: "Qté totale" },
-                { key: "notes", label: "Notes" }
-              ]}
-            />
-          )}
-        </div>
-      </div>
-
-      {transferDetailsLoading ? (
-        <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-          Chargement du détail du transfert...
-        </div>
-      ) : null}
-
-      <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="text-lg font-semibold text-slate-900">
-            Historique des mouvements
+            Mouvements de stock
           </div>
 
           <input
             value={movementSearch}
             onChange={(e) => setMovementSearch(e.target.value)}
-            placeholder="Rechercher un mouvement..."
-            className="w-full md:w-80 rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+            className="rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-brand-500"
+            placeholder="Rechercher mouvement"
           />
         </div>
 
-        <div className="mt-6">
-          {loading ? (
-            <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-              Chargement des mouvements...
-            </div>
-          ) : (
-            <TableCard
-              title={`Mouvements (${filteredMovements.length})`}
-              rows={filteredMovements}
-              emptyText="Aucun mouvement de stock"
-              columns={[
-                { key: "product_name", label: "Produit" },
-                { key: "warehouse_name", label: "Dépôt" },
-                {
-                  key: "movement_type",
-                  label: "Type",
-                  render: (row) => (
-                    <span
-                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getMovementBadge(
-                        row.movement_type
-                      )}`}
-                    >
-                      {row.movement_type}
-                    </span>
-                  )
-                },
-                { key: "quantity", label: "Qté" },
-                { key: "reference_type", label: "Référence" },
-                { key: "notes", label: "Notes" },
-                {
-                  key: "created_at",
-                  label: "Date",
-                  render: (row) =>
-                    new Date(row.created_at).toLocaleString("fr-FR")
-                }
-              ]}
-            />
-          )}
+        <TableCard
+          title={`Mouvements (${filteredMovements.length})`}
+          rows={filteredMovements}
+          emptyText="Aucun mouvement de stock"
+          columns={[
+            { key: "product_name", label: "Produit" },
+            { key: "sku", label: "SKU" },
+            { key: "warehouse_name", label: "Dépôt" },
+            {
+              key: "movement_type",
+              label: "Type",
+              render: (row) => (
+                <span
+                  className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getMovementBadge(
+                    row.movement_type
+                  )}`}
+                >
+                  {row.movement_type}
+                </span>
+              )
+            },
+            {
+              key: "quantity",
+              label: "Quantité",
+              render: (row) => `${row.quantity} ${row.stock_unit || "unit"}`
+            },
+            { key: "reference_type", label: "Référence" },
+            { key: "notes", label: "Notes" }
+          ]}
+        />
+      </div>
+
+      <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
+        <div className="mb-5 flex flex-wrap items-center gap-3 justify-between">
+          <div className="text-lg font-semibold text-slate-900">
+            Transferts inter-dépôts
+          </div>
+
+          <input
+            value={transferSearch}
+            onChange={(e) => setTransferSearch(e.target.value)}
+            className="rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-brand-500"
+            placeholder="Rechercher transfert"
+          />
         </div>
+
+        <TableCard
+          title={`Transferts (${filteredTransfers.length})`}
+          rows={filteredTransfers}
+          emptyText="Aucun transfert"
+          columns={[
+            { key: "transfer_number", label: "N° transfert" },
+            { key: "source_warehouse_name", label: "Dépôt source" },
+            { key: "destination_warehouse_name", label: "Dépôt destination" },
+            { key: "transfer_date", label: "Date" },
+            {
+              key: "status",
+              label: "Statut",
+              render: (row) => (
+                <span
+                  className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getTransferStatusBadge(
+                    row.status
+                  )}`}
+                >
+                  {row.status}
+                </span>
+              )
+            },
+            {
+              key: "actions",
+              label: "Actions",
+              render: (row) => (
+                <button
+                  type="button"
+                  onClick={() => handleLoadTransferDetails(row.id)}
+                  className="rounded-2xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"
+                >
+                  Voir détail
+                </button>
+              )
+            }
+          ]}
+        />
       </div>
     </div>
   );
