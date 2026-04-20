@@ -11,6 +11,10 @@ function formatMoney(value) {
   }).format(Number(value || 0));
 }
 
+function formatPercent(value) {
+  return `${Number(value || 0).toFixed(2)} %`;
+}
+
 function getStatusBadge(status) {
   const map = {
     draft: "bg-amber-100 text-amber-700",
@@ -34,10 +38,7 @@ export default function AccountingDashboardPage() {
       const response = await api.get("/dashboard/accounting-overview");
       setData(response.data.data || null);
     } catch (err) {
-      setError(
-        err?.response?.data?.message ||
-          "Impossible de charger le dashboard comptable."
-      );
+      setError(err?.message || "Impossible de charger le dashboard comptable.");
     } finally {
       setLoading(false);
     }
@@ -64,6 +65,7 @@ export default function AccountingDashboardPage() {
   }
 
   const stats = data?.accounting_global_stats || {};
+  const businessStats = data?.business_global_stats || {};
   const monthly = data?.accounting_monthly_overview || [];
   const classBalances = data?.account_class_balances || [];
   const recentEntries = data?.recent_journal_entries || [];
@@ -72,7 +74,7 @@ export default function AccountingDashboardPage() {
     <div className="space-y-8">
       <SectionTitle
         title="Dashboard comptable"
-        subtitle="Vue synthétique des écritures, soldes et mouvements comptables"
+        subtitle="Vue synthétique des écritures, soldes, coût des ventes et marge brute"
       />
 
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
@@ -94,7 +96,7 @@ export default function AccountingDashboardPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Total débit validé"
           value={formatMoney(stats.total_posted_debit)}
@@ -102,6 +104,25 @@ export default function AccountingDashboardPage() {
         <StatCard
           title="Total crédit validé"
           value={formatMoney(stats.total_posted_credit)}
+        />
+        <StatCard
+          title="Coût des ventes"
+          value={formatMoney(businessStats.total_cogs_amount)}
+        />
+        <StatCard
+          title="Profit brut"
+          value={formatMoney(businessStats.gross_profit_amount)}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <StatCard
+          title="Ventes nettes HT"
+          value={formatMoney(businessStats.total_net_sales_amount)}
+        />
+        <StatCard
+          title="Marge brute"
+          value={formatPercent(businessStats.gross_margin_percent)}
         />
       </div>
 

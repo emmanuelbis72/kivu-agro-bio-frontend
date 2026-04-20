@@ -104,10 +104,7 @@ export default function InvoicesPage() {
       setWarehouses(warehousesRes.data.data || []);
       setProducts(productsRes.data.data || []);
     } catch (err) {
-      setError(
-        err?.response?.data?.message ||
-          "Impossible de charger les données de facturation."
-      );
+      setError(err?.message || "Impossible de charger les données de facturation.");
     } finally {
       setLoading(false);
     }
@@ -137,7 +134,6 @@ export default function InvoicesPage() {
 
   const selectedCustomerWarehouseId = useMemo(() => {
     if (!selectedCustomer?.warehouse_id) return "";
-
     return String(selectedCustomer.warehouse_id);
   }, [selectedCustomer]);
 
@@ -331,10 +327,7 @@ export default function InvoicesPage() {
       resetForm();
       await fetchInitialData();
     } catch (err) {
-      setError(
-        err?.response?.data?.message ||
-          "Erreur lors de la création de la facture."
-      );
+      setError(err?.message || "Erreur lors de la création de la facture.");
     } finally {
       setSubmitLoading(false);
     }
@@ -348,10 +341,7 @@ export default function InvoicesPage() {
       const response = await api.get(`/invoices/${invoiceId}`);
       setSelectedInvoice(response.data.data || null);
     } catch (err) {
-      setError(
-        err?.response?.data?.message ||
-          "Impossible de charger le détail de la facture."
-      );
+      setError(err?.message || "Impossible de charger le détail de la facture.");
     } finally {
       setDetailsLoading(false);
     }
@@ -671,7 +661,7 @@ export default function InvoicesPage() {
             </div>
           ) : null}
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4 mb-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-5 mb-6">
             <div className="rounded-2xl bg-slate-50 p-4">
               <div className="text-sm text-slate-500">Statut</div>
               <div className="mt-2">
@@ -705,6 +695,16 @@ export default function InvoicesPage() {
                 {formatMoney(selectedInvoice.balance_due)}
               </div>
             </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-sm text-slate-500">Profit brut</div>
+              <div className="mt-2 text-lg font-bold text-slate-900">
+                {formatMoney(selectedInvoice.gross_profit_amount)}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">
+                COGS : {formatMoney(selectedInvoice.total_cogs_amount)}
+              </div>
+            </div>
           </div>
 
           <TableCard
@@ -724,6 +724,16 @@ export default function InvoicesPage() {
                 key: "line_total",
                 label: "Total",
                 render: (row) => formatMoney(row.line_total)
+              },
+              {
+                key: "line_cogs_amount",
+                label: "COGS",
+                render: (row) => formatMoney(row.line_cogs_amount)
+              },
+              {
+                key: "line_gross_profit_amount",
+                label: "Profit brut",
+                render: (row) => formatMoney(row.line_gross_profit_amount)
               }
             ]}
           />
@@ -773,57 +783,30 @@ export default function InvoicesPage() {
                   )
                 },
                 {
+                  key: "total_amount",
+                  label: "Total",
+                  render: (row) => formatMoney(row.total_amount)
+                },
+                {
+                  key: "gross_profit_amount",
+                  label: "Profit brut",
+                  render: (row) => formatMoney(row.gross_profit_amount)
+                },
+                {
                   key: "accounting_status",
                   label: "Compta",
                   render: (row) => getAccountingBadge(row)
                 },
                 {
-                  key: "accounting_entry_id",
-                  label: "Écriture",
-                  render: (row) =>
-                    row.accounting_entry_id ? (
-                      <Link
-                        to={`/journal-entries/${row.accounting_entry_id}`}
-                        className="font-semibold text-brand-700 hover:underline"
-                      >
-                        #{row.accounting_entry_id}
-                      </Link>
-                    ) : (
-                      <span className="text-slate-400">-</span>
-                    )
-                },
-                {
-                  key: "total_amount",
-                  label: "Montant",
-                  render: (row) => formatMoney(row.total_amount)
-                },
-                {
-                  key: "balance_due",
-                  label: "Solde",
-                  render: (row) => formatMoney(row.balance_due)
-                },
-                {
                   key: "actions",
                   label: "Actions",
                   render: (row) => (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleViewInvoice(row.id)}
-                        disabled={detailsLoading}
-                        className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"
-                      >
-                        Voir détail
-                      </button>
-
-                      <a
-                        href={`${pdfBaseUrl}/invoices/${row.id}/pdf`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-xl border border-brand-300 px-3 py-2 text-xs font-semibold text-brand-700"
-                      >
-                        PDF
-                      </a>
-                    </div>
+                    <button
+                      onClick={() => handleViewInvoice(row.id)}
+                      className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"
+                    >
+                      Voir
+                    </button>
                   )
                 }
               ]}

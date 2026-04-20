@@ -9,12 +9,39 @@ const initialForm = {
   sku: "",
   barcode: "",
   unit: "piece",
+  stock_unit: "unit",
+  product_type: "finished_product",
+  pack_size: "",
+  pack_unit: "",
   cost_price: "",
   selling_price: "",
   alert_threshold: "",
   is_active: true,
   description: ""
 };
+
+const productTypeOptions = [
+  { value: "finished_product", label: "Produit fini" },
+  { value: "raw_material", label: "Matière première / vrac" },
+  { value: "packaging_material", label: "Emballage / consommable" }
+];
+
+const stockUnitOptions = [
+  { value: "unit", label: "unit" },
+  { value: "g", label: "g" },
+  { value: "kg", label: "kg" },
+  { value: "ml", label: "ml" },
+  { value: "l", label: "l" }
+];
+
+const packUnitOptions = [
+  { value: "", label: "Aucune" },
+  { value: "g", label: "g" },
+  { value: "kg", label: "kg" },
+  { value: "ml", label: "ml" },
+  { value: "l", label: "l" },
+  { value: "unit", label: "unit" }
+];
 
 function normalizeForm(form) {
   return {
@@ -23,6 +50,10 @@ function normalizeForm(form) {
     sku: form.sku.trim(),
     barcode: form.barcode.trim(),
     unit: form.unit.trim() || "piece",
+    stock_unit: form.stock_unit.trim() || "unit",
+    product_type: form.product_type.trim() || "finished_product",
+    pack_size: form.pack_size === "" ? null : Number(form.pack_size),
+    pack_unit: form.pack_unit.trim() || null,
     cost_price: form.cost_price === "" ? 0 : Number(form.cost_price),
     selling_price: form.selling_price === "" ? 0 : Number(form.selling_price),
     alert_threshold:
@@ -37,6 +68,27 @@ function formatMoney(value) {
     style: "currency",
     currency: "USD"
   }).format(Number(value || 0));
+}
+
+function formatProductTypeLabel(value) {
+  const found = productTypeOptions.find((item) => item.value === value);
+  return found ? found.label : value || "-";
+}
+
+function getProductTypeBadge(value) {
+  if (value === "raw_material") {
+    return "bg-amber-100 text-amber-700";
+  }
+
+  if (value === "packaging_material") {
+    return "bg-blue-100 text-blue-700";
+  }
+
+  return "bg-emerald-100 text-emerald-700";
+}
+
+function shouldShowPackFields(productType) {
+  return productType === "finished_product";
 }
 
 export default function ProductsPage() {
@@ -78,10 +130,19 @@ export default function ProductsPage() {
   function handleChange(event) {
     const { name, value, type, checked } = event.target;
 
-    setForm((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value
-    }));
+    setForm((prev) => {
+      const next = {
+        ...prev,
+        [name]: type === "checkbox" ? checked : value
+      };
+
+      if (name === "product_type" && value !== "finished_product") {
+        next.pack_size = "";
+        next.pack_unit = "";
+      }
+
+      return next;
+    });
   }
 
   function handleEdit(product) {
@@ -95,6 +156,10 @@ export default function ProductsPage() {
       sku: product.sku || "",
       barcode: product.barcode || "",
       unit: product.unit || "piece",
+      stock_unit: product.stock_unit || "unit",
+      product_type: product.product_type || "finished_product",
+      pack_size: product.pack_size ?? "",
+      pack_unit: product.pack_unit || "",
       cost_price: product.cost_price ?? "",
       selling_price: product.selling_price ?? "",
       alert_threshold: product.alert_threshold ?? "",
@@ -122,6 +187,36 @@ export default function ProductsPage() {
 
       if (!payload.sku) {
         setError("Le SKU du produit est obligatoire.");
+        return;
+      }
+
+      if (!payload.product_type) {
+        setError("Le type de produit est obligatoire.");
+        return;
+      }
+
+      if (!payload.stock_unit) {
+        setError("L’unité de stock est obligatoire.");
+        return;
+      }
+
+      if (
+        payload.product_type === "finished_product" &&
+        payload.pack_size !== null &&
+        Number(payload.pack_size) <= 0
+      ) {
+        setError("Le format commercial doit être supérieur à 0.");
+        return;
+      }
+
+      if (
+        payload.product_type === "finished_product" &&
+        payload.pack_size !== null &&
+        !payload.pack_unit
+      ) {
+        setError(
+          "L’unité de format commercial est obligatoire si un format est renseigné."
+        );
         return;
       }
 
@@ -191,7 +286,10 @@ export default function ProductsPage() {
         product.category,
         product.sku,
         product.barcode,
-        product.description
+        product.description,
+        product.product_type,
+        product.stock_unit,
+        product.pack_unit
       ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(keyword));
@@ -222,7 +320,10 @@ export default function ProductsPage() {
           {editingProductId ? "Modifier le produit" : "Créer un produit"}
         </div>
 
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <form
+          onSubmit={handleSubmit}
+          className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3"
+        >
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
               Nom du produit *
@@ -277,7 +378,43 @@ export default function ProductsPage() {
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
-              Unité
+              Type produit *
+            </label>
+            <select
+              name="product_type"
+              value={form.product_type}
+              onChange={handleChange}
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+            >
+              {productTypeOptions.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Unité stock *
+            </label>
+            <select
+              name="stock_unit"
+              value={form.stock_unit}
+              onChange={handleChange}
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+            >
+              {stockUnitOptions.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Unité héritée / commerciale actuelle
             </label>
             <input
               name="unit"
@@ -287,6 +424,48 @@ export default function ProductsPage() {
               placeholder="piece"
             />
           </div>
+
+          {shouldShowPackFields(form.product_type) ? (
+            <>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Format commercial
+                </label>
+                <input
+                  name="pack_size"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.pack_size}
+                  onChange={handleChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                  placeholder="Ex: 100"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Unité format
+                </label>
+                <select
+                  name="pack_unit"
+                  value={form.pack_unit}
+                  onChange={handleChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  {packUnitOptions.map((item) => (
+                    <option key={item.value || "empty"} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 md:col-span-2">
+              Pas de format commercial requis pour ce type de produit.
+            </div>
+          )}
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -413,6 +592,28 @@ export default function ProductsPage() {
                 { key: "name", label: "Produit" },
                 { key: "category", label: "Catégorie" },
                 { key: "sku", label: "SKU" },
+                {
+                  key: "product_type",
+                  label: "Type",
+                  render: (row) => (
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getProductTypeBadge(
+                        row.product_type
+                      )}`}
+                    >
+                      {formatProductTypeLabel(row.product_type)}
+                    </span>
+                  )
+                },
+                { key: "stock_unit", label: "Unité stock" },
+                {
+                  key: "pack_format",
+                  label: "Format",
+                  render: (row) =>
+                    row.pack_size && row.pack_unit
+                      ? `${row.pack_size} ${row.pack_unit}`
+                      : "-"
+                },
                 {
                   key: "cost_price",
                   label: "Revient",

@@ -20,6 +20,10 @@ function formatMoney(value) {
   }).format(Number(value || 0));
 }
 
+function formatPercent(value) {
+  return `${Number(value || 0).toFixed(2)} %`;
+}
+
 function getStatusBadge(status) {
   const map = {
     draft: "bg-slate-200 text-slate-700",
@@ -89,10 +93,7 @@ export default function PaymentsPage() {
       const invoicesData = await fetchInvoices();
       setInvoices(invoicesData);
     } catch (err) {
-      setError(
-        err?.response?.data?.message ||
-          "Impossible de charger les données de paiement."
-      );
+      setError(err?.message || "Impossible de charger les données de paiement.");
     } finally {
       setLoading(false);
     }
@@ -107,7 +108,11 @@ export default function PaymentsPage() {
       if (!invoiceId) {
         setSelectedInvoice(null);
         setPayments([]);
-        setForm((prev) => ({ ...prev, invoice_id: "" }));
+        setForm((prev) => ({
+          ...prev,
+          invoice_id: "",
+          amount: ""
+        }));
         return;
       }
 
@@ -125,6 +130,7 @@ export default function PaymentsPage() {
 
       setSelectedInvoice(invoiceData);
       setPayments(paymentsData);
+
       setForm((prev) => ({
         ...prev,
         invoice_id: String(invoiceId),
@@ -134,10 +140,7 @@ export default function PaymentsPage() {
             : ""
       }));
     } catch (err) {
-      setError(
-        err?.response?.data?.message ||
-          "Impossible de charger la facture sélectionnée."
-      );
+      setError(err?.message || "Impossible de charger la facture sélectionnée.");
     } finally {
       setPaymentsLoading(false);
     }
@@ -191,10 +194,30 @@ export default function PaymentsPage() {
         return;
       }
 
+      if (!selectedInvoice) {
+        setError("Aucune facture sélectionnée.");
+        return;
+      }
+
+      if (String(selectedInvoice.status || "").trim().toLowerCase() === "paid") {
+        setError("Cette facture est déjà entièrement payée.");
+        return;
+      }
+
+      if (Number(selectedInvoice.balance_due || 0) <= 0) {
+        setError("Cette facture ne présente plus de solde à payer.");
+        return;
+      }
+
       const amount = Number(form.amount);
 
       if (Number.isNaN(amount) || amount <= 0) {
         setError("Le montant du paiement doit être supérieur à 0.");
+        return;
+      }
+
+      if (amount > Number(selectedInvoice.balance_due || 0)) {
+        setError("Le montant saisi dépasse le solde restant dû.");
         return;
       }
 
@@ -216,11 +239,15 @@ export default function PaymentsPage() {
         );
       } else if (accounting?.status === "skipped") {
         setSuccessMessage(
-          `Paiement enregistré avec succès. Comptabilisation ignorée : ${accounting.reason || "paramétrage manquant"}.`
+          `Paiement enregistré avec succès. Comptabilisation ignorée : ${
+            accounting.reason || "paramétrage manquant"
+          }.`
         );
       } else if (accounting?.status === "error") {
         setSuccessMessage(
-          `Paiement enregistré avec succès. Comptabilisation en erreur : ${accounting.reason || "erreur inconnue"}.`
+          `Paiement enregistré avec succès. Comptabilisation en erreur : ${
+            accounting.reason || "erreur inconnue"
+          }.`
         );
       } else {
         setSuccessMessage("Paiement enregistré avec succès.");
@@ -229,14 +256,25 @@ export default function PaymentsPage() {
       await refreshSelectedInvoice(form.invoice_id);
       resetFormKeepInvoice();
     } catch (err) {
-      setError(
-        err?.response?.data?.message ||
-          "Erreur lors de l’enregistrement du paiement."
-      );
+      setError(err?.message || "Erreur lors de l’enregistrement du paiement.");
     } finally {
       setSubmitLoading(false);
     }
   }
+
+  const grossMargin = useMemo(() => {
+    if (!selectedInvoice) return 0;
+
+    const netSales =
+      Number(selectedInvoice.total_amount || 0) -
+      Number(selectedInvoice.tax_amount || 0);
+
+    if (netSales <= 0) return 0;
+
+    return (
+      (Number(selectedInvoice.gross_profit_amount || 0) / netSales) * 100
+    );
+  }, [selectedInvoice]);
 
   const filteredInvoices = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -339,6 +377,7 @@ export default function PaymentsPage() {
                   onChange={handleChange}
                   className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                   placeholder="0"
+                  disabled={!selectedInvoice || Number(selectedInvoice.balance_due || 0) <= 0}
                 />
               </div>
 
@@ -368,7 +407,7 @@ export default function PaymentsPage() {
                   value={form.reference}
                   onChange={handleChange}
                   className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-                  placeholder="Ex: REC-001"
+                  placeholder="Référence du paiement"
                 />
               </div>
 
@@ -382,102 +421,70 @@ export default function PaymentsPage() {
                   onChange={handleChange}
                   rows="3"
                   className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-                  placeholder="Acompte, règlement partiel, observation..."
+                  placeholder="Notes internes"
                 />
               </div>
 
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="submit"
-                  disabled={submitLoading}
-                  className="rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
-                >
-                  {submitLoading ? "Enregistrement..." : "Enregistrer le paiement"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={resetFormKeepInvoice}
-                  className="rounded-2xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700"
-                >
-                  Réinitialiser
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={
+                  submitLoading ||
+                  !selectedInvoice ||
+                  Number(selectedInvoice.balance_due || 0) <= 0
+                }
+                className="w-full rounded-2xl bg-brand-600 px-5 py-4 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {submitLoading ? "Enregistrement..." : "Enregistrer le paiement"}
+              </button>
             </form>
           </div>
         </div>
 
         <div className="xl:col-span-3 space-y-6">
           <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
-            <div className="mb-5 text-lg font-semibold text-slate-900">
-              Résumé de la facture
+            <div className="mb-5 flex items-center justify-between gap-3 flex-wrap">
+              <div className="text-lg font-semibold text-slate-900">
+                Facture sélectionnée
+              </div>
+
+              {selectedInvoice?.accounting_entry_id ? (
+                <div className="text-sm text-slate-600">
+                  Écriture liée :{" "}
+                  <Link
+                    to={`/journal-entries/${selectedInvoice.accounting_entry_id}`}
+                    className="font-semibold text-brand-700 hover:underline"
+                  >
+                    #{selectedInvoice.accounting_entry_id}
+                  </Link>
+                </div>
+              ) : null}
             </div>
 
-            {paymentsLoading ? (
+            {!selectedInvoice ? (
               <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                Chargement de la facture...
-              </div>
-            ) : !selectedInvoice ? (
-              <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                Sélectionne une facture pour voir son détail.
+                Sélectionne une facture pour voir son détail et enregistrer un paiement.
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                  <div className="rounded-2xl bg-slate-50 p-4">
-                    <div className="text-sm text-slate-500">Facture</div>
-                    <div className="mt-2 text-lg font-bold text-slate-900">
-                      {selectedInvoice.invoice_number}
-                    </div>
-                    <div className="mt-1 text-sm text-slate-500">
-                      {selectedInvoice.invoice_date}
-                    </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="text-lg font-semibold text-slate-900">
+                    {selectedInvoice.invoice_number}
                   </div>
-
-                  <div className="rounded-2xl bg-slate-50 p-4">
-                    <div className="text-sm text-slate-500">Client</div>
-                    <div className="mt-2 text-lg font-bold text-slate-900">
-                      {selectedInvoice.customer_name}
-                    </div>
-                    <div className="mt-1 text-sm text-slate-500">
-                      {selectedInvoice.warehouse_name}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl bg-slate-50 p-4">
-                    <div className="text-sm text-slate-500">Statut</div>
-                    <div className="mt-2">
-                      <span
-                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadge(
-                          selectedInvoice.status
-                        )}`}
-                      >
-                        {selectedInvoice.status}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl bg-slate-50 p-4">
-                    <div className="text-sm text-slate-500">Solde dû</div>
-                    <div className="mt-2 text-lg font-bold text-slate-900">
-                      {formatMoney(selectedInvoice.balance_due)}
-                    </div>
-                  </div>
+                  <span
+                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadge(
+                      selectedInvoice.status
+                    )}`}
+                  >
+                    {selectedInvoice.status}
+                  </span>
+                  {getAccountingBadge(selectedInvoice)}
                 </div>
 
-                {selectedInvoice.accounting_entry_id ? (
-                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                    Écriture facture liée :{" "}
-                    <Link
-                      to={`/journal-entries/${selectedInvoice.accounting_entry_id}`}
-                      className="font-semibold text-brand-700 hover:underline"
-                    >
-                      #{selectedInvoice.accounting_entry_id}
-                    </Link>
-                  </div>
-                ) : null}
+                <div className="mt-2 text-sm text-slate-500">
+                  {selectedInvoice.customer_name} • {selectedInvoice.warehouse_name}
+                </div>
 
-                <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-5">
                   <div className="rounded-2xl border border-slate-200 p-4">
                     <div className="text-sm text-slate-500">Montant total</div>
                     <div className="mt-2 text-xl font-bold text-slate-900">
@@ -496,6 +503,23 @@ export default function PaymentsPage() {
                     <div className="text-sm text-slate-500">Reste à payer</div>
                     <div className="mt-2 text-xl font-bold text-slate-900">
                       {formatMoney(selectedInvoice.balance_due)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 p-4">
+                    <div className="text-sm text-slate-500">COGS</div>
+                    <div className="mt-2 text-xl font-bold text-slate-900">
+                      {formatMoney(selectedInvoice.total_cogs_amount)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 p-4">
+                    <div className="text-sm text-slate-500">Profit brut</div>
+                    <div className="mt-2 text-xl font-bold text-green-700">
+                      {formatMoney(selectedInvoice.gross_profit_amount)}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Marge : {formatPercent(grossMargin)}
                     </div>
                   </div>
                 </div>
@@ -567,8 +591,9 @@ export default function PaymentsPage() {
                 rows={filteredInvoices}
                 emptyText="Aucune facture trouvée"
                 columns={[
-                  { key: "invoice_number", label: "Facture" },
+                  { key: "invoice_number", label: "Numéro" },
                   { key: "customer_name", label: "Client" },
+                  { key: "warehouse_name", label: "Dépôt" },
                   { key: "invoice_date", label: "Date" },
                   {
                     key: "status",
@@ -584,26 +609,21 @@ export default function PaymentsPage() {
                     )
                   },
                   {
-                    key: "total_amount",
-                    label: "Total",
-                    render: (row) => formatMoney(row.total_amount)
-                  },
-                  {
-                    key: "paid_amount",
-                    label: "Payé",
-                    render: (row) => formatMoney(row.paid_amount)
-                  },
-                  {
                     key: "balance_due",
-                    label: "Solde",
+                    label: "Reste à payer",
                     render: (row) => formatMoney(row.balance_due)
                   },
                   {
+                    key: "gross_profit_amount",
+                    label: "Profit brut",
+                    render: (row) => formatMoney(row.gross_profit_amount)
+                  },
+                  {
                     key: "actions",
-                    label: "Action",
+                    label: "Actions",
                     render: (row) => (
                       <button
-                        onClick={() => handleSelectInvoice(row.id)}
+                        onClick={() => handleSelectInvoice(String(row.id))}
                         className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"
                       >
                         Sélectionner

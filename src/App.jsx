@@ -11,6 +11,7 @@ import AIBusinessRulesPage from "./pages/AIBusinessRulesPage";
 import ProductsPage from "./pages/ProductsPage";
 import WarehousesPage from "./pages/WarehousesPage";
 import StockPage from "./pages/StockPage";
+import ProductionPage from "./pages/ProductionPage";
 import CustomersPage from "./pages/CustomersPage";
 import InvoicesPage from "./pages/InvoicesPage";
 import PaymentsPage from "./pages/PaymentsPage";
@@ -22,6 +23,8 @@ import TrialBalancePage from "./pages/TrialBalancePage";
 import GeneralLedgerPage from "./pages/GeneralLedgerPage";
 import IncomeStatementPage from "./pages/IncomeStatementPage";
 import BalanceSheetPage from "./pages/BalanceSheetPage";
+import KabotDashboardPage from "./pages/KabotDashboardPage";
+import CompanyKnowledgePage from "./pages/CompanyKnowledgePage";
 import NotFoundPage from "./pages/NotFoundPage";
 
 export default function App() {
@@ -36,15 +39,16 @@ export default function App() {
             path="accounting-dashboard"
             element={<AccountingDashboardPage />}
           />
-          <Route path="ai-reasoning" element={<AIReasoningPage />} />
-          <Route path="ai-business-rules" element={<AIBusinessRulesPage />} />
+
           <Route path="products" element={<ProductsPage />} />
           <Route path="warehouses" element={<WarehousesPage />} />
           <Route path="stock" element={<StockPage />} />
+          <Route path="production" element={<ProductionPage />} />
           <Route path="customers" element={<CustomersPage />} />
           <Route path="invoices" element={<InvoicesPage />} />
           <Route path="payments" element={<PaymentsPage />} />
           <Route path="expenses" element={<ExpensesPage />} />
+
           <Route path="accounts" element={<AccountsPage />} />
           <Route
             path="accounting-settings"
@@ -56,6 +60,14 @@ export default function App() {
           <Route path="general-ledger" element={<GeneralLedgerPage />} />
           <Route path="income-statement" element={<IncomeStatementPage />} />
           <Route path="balance-sheet" element={<BalanceSheetPage />} />
+
+          <Route path="ai-reasoning" element={<AIReasoningPage />} />
+          <Route path="ai-business-rules" element={<AIBusinessRulesPage />} />
+          <Route path="kabot" element={<KabotDashboardPage />} />
+          <Route
+            path="company-knowledge"
+            element={<CompanyKnowledgePage />}
+          />
 
           <Route path="*" element={<NotFoundPage />} />
         </Route>

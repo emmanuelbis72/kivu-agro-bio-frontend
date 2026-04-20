@@ -5,6 +5,7 @@ import {
   Package,
   Warehouse,
   Boxes,
+  Factory,
   Users,
   FileText,
   Wallet,
@@ -21,7 +22,9 @@ import {
   ChevronRight,
   Brain,
   SlidersHorizontal,
-  Target
+  Target,
+  ShieldAlert,
+  DatabaseZap
 } from "lucide-react";
 
 const mainLinks = [
@@ -29,6 +32,11 @@ const mainLinks = [
   { to: "/products", label: "Produits", icon: Package },
   { to: "/warehouses", label: "Dépôts", icon: Warehouse },
   { to: "/stock", label: "Stock", icon: Boxes },
+  {
+    to: "/production",
+    label: "Production / Conditionnement",
+    icon: Factory
+  },
   { to: "/customers", label: "Clients", icon: Users },
   { to: "/invoices", label: "Factures", icon: FileText },
   { to: "/payments", label: "Paiements", icon: Wallet },
@@ -56,6 +64,12 @@ const accountingLinks = [
 
 const aiLinks = [
   { to: "/ai-reasoning", label: "Assistant Direction IA", icon: Brain },
+  { to: "/kabot", label: "KABOT Dashboard", icon: ShieldAlert },
+  {
+    to: "/company-knowledge",
+    label: "Mémoire entreprise",
+    icon: DatabaseZap
+  },
   {
     to: "/ai-scoring",
     label: "Scoring intelligent IA",

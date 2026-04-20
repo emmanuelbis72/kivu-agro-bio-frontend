@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import api from "../api/axios";
 import SectionTitle from "../components/ui/SectionTitle";
 import TableCard from "../components/ui/TableCard";
@@ -140,10 +141,105 @@ function extractRiskAndOpportunityRows(drivers = []) {
   return { risks, opportunities, neutral };
 }
 
+function normalizeCEOBriefPayload(payload) {
+  const ai = payload?.ai || {};
+  const rawData = payload?.rawData || {};
+
+  return {
+    intent: "ai_reasoning",
+    period: "brief_temps_reel",
+    source_module: "ai_ceo",
+    confidence_score: ai?.confidence_score ?? 0.9,
+    priority_level: ai?.priority_level || "HIGH",
+    summary:
+      ai?.summary ||
+      "Brief CEO généré automatiquement à partir des KPI, des créances et des marges.",
+    answer:
+      ai?.answer ||
+      ai?.analysis ||
+      "Aucune analyse détaillée disponible.",
+    metrics: {
+      total_sales_amount: rawData?.kpis?.total_sales || 0,
+      total_collected_amount: rawData?.kpis?.total_paid || 0,
+      total_receivables: rawData?.kpis?.total_due || 0
+    },
+    drivers: [
+      ...(Array.isArray(ai?.alerts)
+        ? ai.alerts.map((item) => `Risque: ${item}`)
+        : []),
+      ...(Array.isArray(ai?.opportunities)
+        ? ai.opportunities.map((item) => `Opportunité: ${item}`)
+        : [])
+    ],
+    recommendations: Array.isArray(ai?.actions)
+      ? ai.actions
+      : Array.isArray(ai?.recommendations)
+      ? ai.recommendations
+      : [],
+    rawData
+  };
+}
+
+function slugify(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 60);
+}
+
+function buildKnowledgePayload(result, question) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const baseTitle =
+    result?.source_module === "ai_ceo"
+      ? "Brief CEO KABOT"
+      : question?.trim()
+      ? `Analyse IA - ${question.trim().slice(0, 80)}`
+      : "Analyse IA enregistrée";
+
+  const knowledgeKey = `ai_note_${slugify(baseTitle)}_${timestamp}`;
+
+  const sections = [
+    `Résumé exécutif :\n${result?.summary || "-"}`,
+    `\nAnalyse détaillée :\n${result?.answer || "-"}`,
+    result?.recommendations?.length
+      ? `\nRecommandations :\n- ${result.recommendations.join("\n- ")}`
+      : "",
+    result?.drivers?.length
+      ? `\nFacteurs / signaux :\n- ${result.drivers.join("\n- ")}`
+      : ""
+  ].filter(Boolean);
+
+  return {
+    knowledge_key: knowledgeKey,
+    title: baseTitle,
+    category:
+      result?.source_module === "ai_ceo" ? "founder_notes" : "strategy",
+    content: sections.join("\n"),
+    tags: [
+      "ai",
+      "kabot",
+      result?.source_module || "analysis",
+      result?.intent || "reasoning"
+    ],
+    source_type: "ai_generated",
+    source_reference: question?.trim() || "AIReasoningPage",
+    priority_level:
+      String(result?.priority_level || "").toUpperCase() === "CRITICAL"
+        ? "critical"
+        : String(result?.priority_level || "").toUpperCase() === "HIGH"
+        ? "high"
+        : "normal"
+  };
+}
+
 export default function AIReasoningPage() {
   const [question, setQuestion] = useState("");
   const [quickQuestions, setQuickQuestions] = useState([]);
   const [history, setHistory] = useState([]);
+  const [savedAnalyses, setSavedAnalyses] = useState([]);
   const [result, setResult] = useState(null);
   const [businessRules, setBusinessRules] = useState({
     strategicProducts: [],
@@ -158,10 +254,14 @@ export default function AIReasoningPage() {
 
   const [loadingQuickQuestions, setLoadingQuickQuestions] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [loadingSavedAnalyses, setLoadingSavedAnalyses] = useState(true);
   const [loadingBusinessRules, setLoadingBusinessRules] = useState(true);
   const [submitLoading, setSubmitLoading] = useState(false);
+  const [ceoBriefLoading, setCeoBriefLoading] = useState(false);
+  const [saveMemoryLoading, setSaveMemoryLoading] = useState(false);
 
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   async function fetchQuickQuestions() {
     try {
@@ -170,10 +270,7 @@ export default function AIReasoningPage() {
       const response = await api.get("/ai/quick-questions");
       setQuickQuestions(response.data.data || []);
     } catch (err) {
-      setError(
-        err?.response?.data?.message ||
-          "Impossible de charger les questions suggérées."
-      );
+      setError(err?.message || "Impossible de charger les questions suggérées.");
     } finally {
       setLoadingQuickQuestions(false);
     }
@@ -186,12 +283,35 @@ export default function AIReasoningPage() {
       const response = await api.get("/ai/history");
       setHistory(response.data.data || []);
     } catch (err) {
-      setError(
-        err?.response?.data?.message ||
-          "Impossible de charger l’historique IA."
-      );
+      setError(err?.message || "Impossible de charger l’historique IA.");
     } finally {
       setLoadingHistory(false);
+    }
+  }
+
+  async function fetchSavedAnalyses() {
+    try {
+      setLoadingSavedAnalyses(true);
+
+      const response = await api.get("/company-knowledge");
+      const rows = response.data.data || [];
+
+      setSavedAnalyses(
+        rows
+          .filter((row) => row.source_type === "ai_generated")
+          .sort(
+            (a, b) =>
+              new Date(b.updated_at || b.created_at).getTime() -
+              new Date(a.updated_at || a.created_at).getTime()
+          )
+          .slice(0, 10)
+      );
+    } catch (err) {
+      setError(
+        err?.message || "Impossible de charger les analyses sauvegardées."
+      );
+    } finally {
+      setLoadingSavedAnalyses(false);
     }
   }
 
@@ -202,10 +322,7 @@ export default function AIReasoningPage() {
       const response = await api.get("/ai/business-rules");
       setBusinessRules(normalizeBusinessRules(response.data.data || {}));
     } catch (err) {
-      setError(
-        err?.response?.data?.message ||
-          "Impossible de charger les règles métier IA."
-      );
+      setError(err?.message || "Impossible de charger les règles métier IA.");
     } finally {
       setLoadingBusinessRules(false);
     }
@@ -214,6 +331,7 @@ export default function AIReasoningPage() {
   useEffect(() => {
     fetchQuickQuestions();
     fetchHistory();
+    fetchSavedAnalyses();
     fetchBusinessRules();
   }, []);
 
@@ -223,6 +341,7 @@ export default function AIReasoningPage() {
     try {
       setSubmitLoading(true);
       setError("");
+      setSuccessMessage("");
 
       const normalizedQuestion = question.trim();
 
@@ -238,18 +357,57 @@ export default function AIReasoningPage() {
       setResult(response.data.data || null);
       await fetchHistory();
     } catch (err) {
-      setError(
-        err?.response?.data?.message ||
-          "Impossible d’interroger l’assistant IA."
-      );
+      setError(err?.message || "Impossible d’interroger l’assistant IA.");
     } finally {
       setSubmitLoading(false);
+    }
+  }
+
+  async function handleLoadCEOBrief() {
+    try {
+      setCeoBriefLoading(true);
+      setError("");
+      setSuccessMessage("");
+
+      const response = await api.get("/ai/ceo-brief");
+      setResult(normalizeCEOBriefPayload(response.data.data || {}));
+    } catch (err) {
+      setError(err?.message || "Impossible de charger le brief CEO.");
+    } finally {
+      setCeoBriefLoading(false);
+    }
+  }
+
+  async function handleSaveToMemory() {
+    try {
+      if (!result) {
+        setError("Aucune analyse IA à enregistrer.");
+        return;
+      }
+
+      setSaveMemoryLoading(true);
+      setError("");
+      setSuccessMessage("");
+
+      const payload = buildKnowledgePayload(result, question);
+
+      await api.post("/company-knowledge", payload);
+
+      setSuccessMessage("Analyse enregistrée dans la mémoire entreprise.");
+      await fetchSavedAnalyses();
+    } catch (err) {
+      setError(
+        err?.message || "Impossible d’enregistrer cette analyse dans la mémoire."
+      );
+    } finally {
+      setSaveMemoryLoading(false);
     }
   }
 
   function handleQuickQuestionClick(item) {
     setQuestion(item);
     setError("");
+    setSuccessMessage("");
   }
 
   const metricsRows = useMemo(() => {
@@ -306,9 +464,31 @@ export default function AIReasoningPage() {
         subtitle="Moteur de raisonnement métier pour KIVU AGRO BIO"
       />
 
+      <div className="flex flex-wrap gap-3">
+        <Link
+          to="/kabot"
+          className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+        >
+          🚀 Ouvrir KABOT Dashboard
+        </Link>
+
+        <Link
+          to="/company-knowledge"
+          className="rounded-2xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+        >
+          🧠 Mémoire entreprise
+        </Link>
+      </div>
+
       {error ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
+        </div>
+      ) : null}
+
+      {successMessage ? (
+        <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          {successMessage}
         </div>
       ) : null}
 
@@ -330,10 +510,19 @@ export default function AIReasoningPage() {
             <div className="flex flex-wrap gap-3">
               <button
                 type="submit"
-                disabled={submitLoading}
+                disabled={submitLoading || ceoBriefLoading || saveMemoryLoading}
                 className="rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {submitLoading ? "Analyse en cours..." : "Analyser"}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleLoadCEOBrief}
+                disabled={submitLoading || ceoBriefLoading || saveMemoryLoading}
+                className="rounded-2xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {ceoBriefLoading ? "Brief CEO..." : "Brief CEO"}
               </button>
 
               <button
@@ -342,6 +531,7 @@ export default function AIReasoningPage() {
                   setQuestion("");
                   setResult(null);
                   setError("");
+                  setSuccessMessage("");
                 }}
                 className="rounded-2xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700"
               >
@@ -471,16 +661,42 @@ export default function AIReasoningPage() {
                   </div>
                 </div>
 
-                <span
-                  className={`inline-flex rounded-full px-4 py-2 text-xs font-semibold ${getPriorityBadgeClass(
-                    result.priority_level
-                  )}`}
-                >
-                  Priorité {String(result.priority_level || "MEDIUM").toUpperCase()}
-                </span>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span
+                    className={`inline-flex rounded-full px-4 py-2 text-xs font-semibold ${getPriorityBadgeClass(
+                      result.priority_level
+                    )}`}
+                  >
+                    Priorité {String(result.priority_level || "MEDIUM").toUpperCase()}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveToMemory}
+                    disabled={saveMemoryLoading}
+                    className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  >
+                    {saveMemoryLoading
+                      ? "Enregistrement..."
+                      : "Enregistrer dans la mémoire"}
+                  </button>
+                </div>
               </div>
             </div>
-          ) : null}
+          ) : (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleSaveToMemory}
+                disabled={saveMemoryLoading}
+                className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {saveMemoryLoading
+                  ? "Enregistrement..."
+                  : "Enregistrer dans la mémoire"}
+              </button>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
@@ -580,6 +796,35 @@ export default function AIReasoningPage() {
           />
         </>
       ) : null}
+
+      <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+        {loadingSavedAnalyses ? (
+          <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+            Chargement des analyses sauvegardées...
+          </div>
+        ) : (
+          <TableCard
+            title={`Dernières analyses sauvegardées (${savedAnalyses.length})`}
+            rows={savedAnalyses}
+            emptyText="Aucune analyse sauvegardée pour le moment"
+            columns={[
+              { key: "title", label: "Titre" },
+              { key: "category", label: "Catégorie" },
+              { key: "priority_level", label: "Priorité" },
+              {
+                key: "content",
+                label: "Contenu",
+                render: (row) => (
+                  <div className="max-w-md truncate" title={row.content}>
+                    {row.content}
+                  </div>
+                )
+              },
+              { key: "updated_at", label: "Dernière mise à jour" }
+            ]}
+          />
+        )}
+      </div>
 
       <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
         {loadingHistory ? (
