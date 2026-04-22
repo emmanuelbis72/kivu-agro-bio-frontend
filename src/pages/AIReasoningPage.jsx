@@ -4,6 +4,10 @@ import api from "../api/axios";
 import SectionTitle from "../components/ui/SectionTitle";
 import TableCard from "../components/ui/TableCard";
 
+const AI_REASONING_TIMEOUT_MS = Number(
+  import.meta.env.VITE_AI_REASONING_TIMEOUT_MS || 120000
+);
+
 function formatMetricValue(value) {
   if (typeof value === "number") {
     return new Intl.NumberFormat("fr-FR", {
@@ -350,14 +354,24 @@ export default function AIReasoningPage() {
         return;
       }
 
-      const response = await api.post("/ai/ask", {
-        question: normalizedQuestion
-      });
+      const response = await api.post(
+        "/ai/ask",
+        {
+          question: normalizedQuestion
+        },
+        {
+          timeout: AI_REASONING_TIMEOUT_MS
+        }
+      );
 
       setResult(response.data.data || null);
       await fetchHistory();
     } catch (err) {
-      setError(err?.message || "Impossible d’interroger l’assistant IA.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible d’interroger l’assistant IA."
+      );
     } finally {
       setSubmitLoading(false);
     }
@@ -369,10 +383,16 @@ export default function AIReasoningPage() {
       setError("");
       setSuccessMessage("");
 
-      const response = await api.get("/ai/ceo-brief");
+      const response = await api.get("/ai/ceo-brief", {
+        timeout: AI_REASONING_TIMEOUT_MS
+      });
       setResult(normalizeCEOBriefPayload(response.data.data || {}));
     } catch (err) {
-      setError(err?.message || "Impossible de charger le brief CEO.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de charger le brief CEO."
+      );
     } finally {
       setCeoBriefLoading(false);
     }
