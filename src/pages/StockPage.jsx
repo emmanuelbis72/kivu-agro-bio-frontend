@@ -80,6 +80,14 @@ const mixtureItemInitial = {
 const mixtureInitial = {
   warehouse_id: "",
   target_product_id: "",
+  create_target_product: false,
+  target_product_name: "",
+  target_product_sku: "",
+  target_product_category: "",
+  target_product_unit: "piece",
+  target_product_selling_price: "",
+  target_product_alert_threshold: "",
+  target_product_description: "",
   target_quantity: "",
   target_stock_form: "bulk",
   package_size: "",
@@ -142,6 +150,17 @@ function getMovementQuantityDisplay(row) {
   }
 
   return `${quantity} ${row.unit || "unit"}`;
+}
+
+function buildSkuSuggestion(value) {
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 18);
+
+  return normalized ? `MIX-${normalized}` : "MIX-001";
 }
 
 function isPackageVariant(form) {
@@ -238,6 +257,35 @@ export default function StockPage() {
 
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+
+  const activeProducts = useMemo(
+    () => products.filter((product) => product.is_active !== false),
+    [products]
+  );
+
+  const finishedProducts = useMemo(
+    () =>
+      activeProducts.filter(
+        (product) => product.product_role === "finished_product"
+      ),
+    [activeProducts]
+  );
+
+  const packageSourceProducts = useMemo(
+    () =>
+      activeProducts.filter(
+        (product) => product.product_role !== "packaging_material"
+      ),
+    [activeProducts]
+  );
+
+  const mixtureComponentProducts = useMemo(
+    () =>
+      activeProducts.filter(
+        (product) => product.product_role !== "packaging_material"
+      ),
+    [activeProducts]
+  );
 
   async function fetchInitialData() {
     try {
@@ -407,8 +455,28 @@ export default function StockPage() {
   }
 
   function handleMixtureChange(event) {
-    const { name, value } = event.target;
-    setMixtureForm((prev) => ({ ...prev, [name]: value }));
+    const { name, value, type, checked } = event.target;
+
+    setMixtureForm((prev) => {
+      const next = {
+        ...prev,
+        [name]: type === "checkbox" ? checked : value
+      };
+
+      if (name === "create_target_product" && checked) {
+        next.target_product_id = "";
+      }
+
+      if (name === "target_product_name" && prev.create_target_product) {
+        const currentSku = String(prev.target_product_sku || "").trim();
+
+        if (!currentSku) {
+          next.target_product_sku = buildSkuSuggestion(value);
+        }
+      }
+
+      return next;
+    });
   }
 
   function handleMixtureItemChange(index, field, value) {
@@ -705,6 +773,21 @@ export default function StockPage() {
       setError("");
       setSuccessMessage("");
 
+      if (mixtureForm.create_target_product) {
+        if (!mixtureForm.target_product_name.trim()) {
+          setError("Le nom du nouveau produit mixture est obligatoire.");
+          return;
+        }
+
+        if (!mixtureForm.target_product_sku.trim()) {
+          setError("Le SKU du nouveau produit mixture est obligatoire.");
+          return;
+        }
+      } else if (!Number(mixtureForm.target_product_id)) {
+        setError("Selectionne un produit fini cible ou cree-en un nouveau.");
+        return;
+      }
+
       const components = mixtureForm.components.map((item) => ({
         product_id: Number(item.product_id),
         quantity: Number(item.quantity),
@@ -726,9 +809,36 @@ export default function StockPage() {
         return;
       }
 
+      const componentIds = components.map((item) => item.product_id);
+      if (new Set(componentIds).size !== componentIds.length) {
+        setError(
+          "Chaque composant doit apparaitre une seule fois dans la mixture. Regroupe les quantites sur une seule ligne."
+        );
+        return;
+      }
+
       const payload = {
         warehouse_id: Number(mixtureForm.warehouse_id),
-        target_product_id: Number(mixtureForm.target_product_id),
+        target_product_id: mixtureForm.create_target_product
+          ? undefined
+          : Number(mixtureForm.target_product_id),
+        target_product: mixtureForm.create_target_product
+          ? {
+              name: mixtureForm.target_product_name.trim(),
+              sku: mixtureForm.target_product_sku.trim(),
+              category: mixtureForm.target_product_category.trim(),
+              unit: mixtureForm.target_product_unit.trim() || "piece",
+              selling_price:
+                mixtureForm.target_product_selling_price === ""
+                  ? 0
+                  : Number(mixtureForm.target_product_selling_price),
+              alert_threshold:
+                mixtureForm.target_product_alert_threshold === ""
+                  ? 0
+                  : Number(mixtureForm.target_product_alert_threshold),
+              description: mixtureForm.target_product_description.trim()
+            }
+          : undefined,
         target_quantity: Number(mixtureForm.target_quantity),
         target_stock_form: mixtureForm.target_stock_form,
         package_size:
@@ -893,7 +1003,7 @@ export default function StockPage() {
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
             >
               <option value="">Sélectionner</option>
-              {products.map((product) => (
+              {finishedProducts.map((product) => (
                 <option key={product.id} value={product.id}>
                   {getProductLabel(product)}
                 </option>
@@ -1020,7 +1130,7 @@ export default function StockPage() {
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
             >
               <option value="">Sélectionner</option>
-              {products.map((product) => (
+              {packageSourceProducts.map((product) => (
                 <option key={product.id} value={product.id}>
                   {getProductLabel(product)}
                 </option>
@@ -1199,7 +1309,7 @@ export default function StockPage() {
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
             >
               <option value="">Sélectionner</option>
-              {products.map((product) => (
+              {finishedProducts.map((product) => (
                 <option key={product.id} value={product.id}>
                   {getProductLabel(product)}
                 </option>
@@ -1290,6 +1400,11 @@ export default function StockPage() {
           onSubmit={handlePackageTransformSubmit}
           className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3"
         >
+          <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            Utilise cette operation pour convertir un stock vrac en stock paquet.
+            Le produit source ne peut pas etre un emballage, et le produit cible doit etre un produit fini vendable.
+          </div>
+
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
               Dépôt *
@@ -1459,6 +1574,11 @@ export default function StockPage() {
     if (activeTab === "mixture") {
       return (
         <form onSubmit={handleMixtureSubmit} className="space-y-6">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            La mixture consomme plusieurs stocks existants et cree un seul produit fini.
+            Tu peux choisir un produit fini deja cree ou creer ce produit directement ici.
+          </div>
+
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -1479,6 +1599,18 @@ export default function StockPage() {
               </select>
             </div>
 
+            <div className="md:col-span-2 xl:col-span-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              <label className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  name="create_target_product"
+                  checked={mixtureForm.create_target_product}
+                  onChange={handleMixtureChange}
+                />
+                Creer directement un nouveau produit fini pour cette mixture
+              </label>
+            </div>
+
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">
                 Produit mixture *
@@ -1487,16 +1619,122 @@ export default function StockPage() {
                 name="target_product_id"
                 value={mixtureForm.target_product_id}
                 onChange={handleMixtureChange}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                disabled={mixtureForm.create_target_product}
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500 disabled:bg-slate-100 disabled:text-slate-500"
               >
                 <option value="">Sélectionner</option>
-                {products.map((product) => (
+                {finishedProducts.map((product) => (
                   <option key={product.id} value={product.id}>
                     {getProductLabel(product)}
                   </option>
                 ))}
               </select>
             </div>
+
+            {mixtureForm.create_target_product ? (
+              <>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Nom du nouveau produit *
+                  </label>
+                  <input
+                    name="target_product_name"
+                    value={mixtureForm.target_product_name}
+                    onChange={handleMixtureChange}
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                    placeholder="Ex: Mixture Energie"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    SKU du nouveau produit *
+                  </label>
+                  <input
+                    name="target_product_sku"
+                    value={mixtureForm.target_product_sku}
+                    onChange={handleMixtureChange}
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                    placeholder="Ex: KAB-MIX-001"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Categorie
+                  </label>
+                  <input
+                    name="target_product_category"
+                    value={mixtureForm.target_product_category}
+                    onChange={handleMixtureChange}
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                    placeholder="Ex: Mix nutrition"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Unite commerciale
+                  </label>
+                  <input
+                    name="target_product_unit"
+                    value={mixtureForm.target_product_unit}
+                    onChange={handleMixtureChange}
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                    placeholder="piece"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Prix de vente
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    name="target_product_selling_price"
+                    value={mixtureForm.target_product_selling_price}
+                    onChange={handleMixtureChange}
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Seuil d'alerte
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    name="target_product_alert_threshold"
+                    value={mixtureForm.target_product_alert_threshold}
+                    onChange={handleMixtureChange}
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                    placeholder="0"
+                  />
+                </div>
+
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setMixtureForm((prev) => ({
+                        ...prev,
+                        target_product_sku: buildSkuSuggestion(
+                          prev.target_product_name
+                        )
+                      }))
+                    }
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700"
+                  >
+                    Generer le SKU
+                  </button>
+                </div>
+              </>
+            ) : null}
 
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -1549,6 +1787,22 @@ export default function StockPage() {
             )}
           </div>
 
+          {mixtureForm.create_target_product ? (
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Description du nouveau produit
+              </label>
+              <textarea
+                name="target_product_description"
+                value={mixtureForm.target_product_description}
+                onChange={handleMixtureChange}
+                rows="3"
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                placeholder="Description commerciale ou interne du produit fini cree par cette mixture"
+              />
+            </div>
+          ) : null}
+
           <div>
             <div className="mb-4 flex items-center justify-between">
               <div className="text-base font-semibold text-slate-900">
@@ -1581,7 +1835,7 @@ export default function StockPage() {
                       className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                     >
                       <option value="">Sélectionner</option>
-                      {products.map((product) => (
+                      {mixtureComponentProducts.map((product) => (
                         <option key={product.id} value={product.id}>
                           {getProductLabel(product)}
                         </option>
@@ -1915,7 +2169,7 @@ export default function StockPage() {
     <div className="space-y-8">
       <SectionTitle
         title="Stock"
-        subtitle="Gestion du stock par dépôt : vrac, paquets, transformations, mixtures et transferts"
+        subtitle="Organisation professionnelle du stock par depot : le produit porte un role metier, et le stock porte la forme reelle vrac ou paquet"
       />
 
       {error ? (
@@ -1929,6 +2183,10 @@ export default function StockPage() {
           {successMessage}
         </div>
       ) : null}
+
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        Regle pratique : les matieres premieres et les emballages entrent en stock, les produits finis sont vendables, et la forme vrac ou paquet se choisit au niveau du stock et des mouvements.
+      </div>
 
       <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
         <div className="mb-5 flex flex-wrap gap-3">

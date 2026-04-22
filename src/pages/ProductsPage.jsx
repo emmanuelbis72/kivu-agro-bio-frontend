@@ -3,11 +3,18 @@ import api from "../api/axios";
 import SectionTitle from "../components/ui/SectionTitle";
 import TableCard from "../components/ui/TableCard";
 
+const productRoleOptions = [
+  { value: "finished_product", label: "Produit fini" },
+  { value: "raw_material", label: "Matiere premiere" },
+  { value: "packaging_material", label: "Emballage" }
+];
+
 const initialForm = {
   name: "",
   category: "",
   sku: "",
   barcode: "",
+  product_role: "finished_product",
   unit: "piece",
   cost_price: "",
   selling_price: "",
@@ -22,6 +29,7 @@ function normalizeForm(form) {
     category: form.category.trim(),
     sku: form.sku.trim(),
     barcode: form.barcode.trim(),
+    product_role: form.product_role.trim() || "finished_product",
     unit: form.unit.trim() || "piece",
     cost_price: form.cost_price === "" ? 0 : Number(form.cost_price),
     selling_price: form.selling_price === "" ? 0 : Number(form.selling_price),
@@ -37,6 +45,23 @@ function formatMoney(value) {
     style: "currency",
     currency: "USD"
   }).format(Number(value || 0));
+}
+
+function formatProductRole(value) {
+  const found = productRoleOptions.find((item) => item.value === value);
+  return found ? found.label : value || "-";
+}
+
+function getProductRoleBadge(value) {
+  if (value === "raw_material") {
+    return "bg-amber-100 text-amber-700";
+  }
+
+  if (value === "packaging_material") {
+    return "bg-blue-100 text-blue-700";
+  }
+
+  return "bg-emerald-100 text-emerald-700";
 }
 
 export default function ProductsPage() {
@@ -94,6 +119,7 @@ export default function ProductsPage() {
       category: product.category || "",
       sku: product.sku || "",
       barcode: product.barcode || "",
+      product_role: product.product_role || "finished_product",
       unit: product.unit || "piece",
       cost_price: product.cost_price ?? "",
       selling_price: product.selling_price ?? "",
@@ -125,17 +151,22 @@ export default function ProductsPage() {
         return;
       }
 
+      if (!payload.product_role) {
+        setError("Le role du produit est obligatoire.");
+        return;
+      }
+
       if (!payload.unit) {
-        setError("L’unité commerciale du produit est obligatoire.");
+        setError("L unite commerciale du produit est obligatoire.");
         return;
       }
 
       if (editingProductId) {
         await api.put(`/products/${editingProductId}`, payload);
-        setSuccessMessage("Produit mis à jour avec succès.");
+        setSuccessMessage("Produit mis a jour avec succes.");
       } else {
         await api.post("/products", payload);
-        setSuccessMessage("Produit créé avec succès.");
+        setSuccessMessage("Produit cree avec succes.");
       }
 
       resetForm();
@@ -147,7 +178,7 @@ export default function ProductsPage() {
       if (Array.isArray(apiErrors) && apiErrors.length > 0) {
         setError(apiErrors.join(" "));
       } else {
-        setError(apiMessage || "Erreur lors de l’enregistrement du produit.");
+        setError(apiMessage || "Erreur lors de l enregistrement du produit.");
       }
     } finally {
       setSubmitLoading(false);
@@ -168,7 +199,7 @@ export default function ProductsPage() {
       setSuccessMessage("");
 
       await api.delete(`/products/${product.id}`);
-      setSuccessMessage("Produit supprimé avec succès.");
+      setSuccessMessage("Produit supprime avec succes.");
 
       if (editingProductId === product.id) {
         resetForm();
@@ -197,7 +228,8 @@ export default function ProductsPage() {
         product.sku,
         product.barcode,
         product.description,
-        product.unit
+        product.unit,
+        product.product_role
       ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(keyword));
@@ -208,7 +240,7 @@ export default function ProductsPage() {
     <div className="space-y-8">
       <SectionTitle
         title="Produits"
-        subtitle="Catalogue produits : informations commerciales de base. Le type vrac / paquet se gère désormais dans le stock."
+        subtitle="Catalogue propre des produits : role metier, prix et unite commerciale. Le vrac et le paquet restent geres dans le stock."
       />
 
       {error ? (
@@ -223,9 +255,9 @@ export default function ProductsPage() {
         </div>
       ) : null}
 
-      <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
+      <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
         <div className="mb-5 text-lg font-semibold text-slate-900">
-          {editingProductId ? "Modifier le produit" : "Créer un produit"}
+          {editingProductId ? "Modifier le produit" : "Creer un produit"}
         </div>
 
         <form
@@ -247,7 +279,7 @@ export default function ProductsPage() {
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
-              Catégorie
+              Categorie
             </label>
             <input
               name="category"
@@ -273,6 +305,24 @@ export default function ProductsPage() {
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
+              Role produit *
+            </label>
+            <select
+              name="product_role"
+              value={form.product_role}
+              onChange={handleChange}
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+            >
+              {productRoleOptions.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
               Code-barres
             </label>
             <input
@@ -286,7 +336,7 @@ export default function ProductsPage() {
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
-              Unité commerciale
+              Unite commerciale
             </label>
             <input
               name="unit"
@@ -299,7 +349,7 @@ export default function ProductsPage() {
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
-              Seuil d’alerte
+              Seuil d alerte
             </label>
             <input
               name="alert_threshold"
@@ -357,8 +407,8 @@ export default function ProductsPage() {
           </div>
 
           <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            Les informations vrac, paquet, mélange et conditionnement ne se configurent plus ici.
-            Elles se définissent désormais dans le module stock au moment de l’entrée ou de la transformation.
+            Un produit fini peut etre vendu au client. Les matieres premieres et les emballages
+            servent au stock, a la production et aux transformations.
           </div>
 
           <div className="md:col-span-2 xl:col-span-3">
@@ -384,8 +434,8 @@ export default function ProductsPage() {
               {submitLoading
                 ? "Enregistrement..."
                 : editingProductId
-                ? "Mettre à jour"
-                : "Créer le produit"}
+                ? "Mettre a jour"
+                : "Creer le produit"}
             </button>
 
             <button
@@ -393,13 +443,13 @@ export default function ProductsPage() {
               onClick={resetForm}
               className="rounded-2xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700"
             >
-              Réinitialiser
+              Reinitialiser
             </button>
           </div>
         </form>
       </div>
 
-      <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
+      <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="text-lg font-semibold text-slate-900">
             Liste des produits
@@ -409,7 +459,7 @@ export default function ProductsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Rechercher un produit..."
-            className="w-full md:w-80 rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+            className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500 md:w-80"
           />
         </div>
 
@@ -422,12 +472,25 @@ export default function ProductsPage() {
             <TableCard
               title={`Produits (${filteredProducts.length})`}
               rows={filteredProducts}
-              emptyText="Aucun produit trouvé"
+              emptyText="Aucun produit trouve"
               columns={[
                 { key: "name", label: "Produit" },
-                { key: "category", label: "Catégorie" },
+                { key: "category", label: "Categorie" },
                 { key: "sku", label: "SKU" },
-                { key: "unit", label: "Unité commerciale" },
+                {
+                  key: "product_role",
+                  label: "Role",
+                  render: (row) => (
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getProductRoleBadge(
+                        row.product_role
+                      )}`}
+                    >
+                      {formatProductRole(row.product_role)}
+                    </span>
+                  )
+                },
+                { key: "unit", label: "Unite" },
                 {
                   key: "cost_price",
                   label: "Revient",
@@ -438,7 +501,6 @@ export default function ProductsPage() {
                   label: "Vente",
                   render: (row) => formatMoney(row.selling_price)
                 },
-                { key: "alert_threshold", label: "Seuil" },
                 {
                   key: "is_active",
                   label: "Statut",

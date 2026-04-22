@@ -7,7 +7,10 @@ import TableCard from "../components/ui/TableCard";
 const initialItem = {
   product_id: "",
   quantity: "",
-  unit_price: ""
+  unit_price: "",
+  stock_form: "",
+  package_size: "",
+  package_unit: "unit"
 };
 
 const initialForm = {
@@ -51,8 +54,8 @@ function getAccountingBadge(row) {
   };
 
   const labelMap = {
-    posted: "Comptabilisé",
-    skipped: "Ignoré",
+    posted: "Comptabilise",
+    skipped: "Ignore",
     error: "Erreur"
   };
 
@@ -66,6 +69,18 @@ function getAccountingBadge(row) {
       {labelMap[row.accounting_status] || row.accounting_status}
     </span>
   );
+}
+
+function getVariantLabel(item) {
+  if (item.stock_form !== "package") {
+    return item.stock_form === "bulk" ? "Vrac" : "Auto";
+  }
+
+  if (item.package_size && item.package_unit) {
+    return `Paquet - ${item.package_size} ${item.package_unit}`;
+  }
+
+  return "Paquet";
 }
 
 export default function InvoicesPage() {
@@ -104,7 +119,11 @@ export default function InvoicesPage() {
       setWarehouses(warehousesRes.data.data || []);
       setProducts(productsRes.data.data || []);
     } catch (err) {
-      setError(err?.message || "Impossible de charger les données de facturation.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de charger les donnees de facturation."
+      );
     } finally {
       setLoading(false);
     }
@@ -121,6 +140,11 @@ export default function InvoicesPage() {
       items: [{ ...initialItem }]
     });
   }
+
+  const saleProducts = useMemo(
+    () => products.filter((product) => product.product_role === "finished_product"),
+    [products]
+  );
 
   const selectedCustomer = useMemo(() => {
     if (!form.customer_id) return null;
@@ -174,15 +198,6 @@ export default function InvoicesPage() {
 
   function handleFormChange(event) {
     const { name, value } = event.target;
-
-    if (name === "customer_id") {
-      setForm((prev) => ({
-        ...prev,
-        customer_id: value
-      }));
-      return;
-    }
-
     setForm((prev) => ({
       ...prev,
       [name]: value
@@ -196,6 +211,11 @@ export default function InvoicesPage() {
         ...updatedItems[index],
         [field]: value
       };
+
+      if (field === "stock_form" && value !== "package") {
+        updatedItems[index].package_size = "";
+        updatedItems[index].package_unit = "unit";
+      }
 
       return {
         ...prev,
@@ -217,10 +237,9 @@ export default function InvoicesPage() {
         return prev;
       }
 
-      const updatedItems = prev.items.filter((_, i) => i !== index);
       return {
         ...prev,
-        items: updatedItems
+        items: prev.items.filter((_, i) => i !== index)
       };
     });
   }
@@ -229,18 +248,13 @@ export default function InvoicesPage() {
     const discount = Number(form.discount_amount || 0);
     const tax = Number(form.tax_amount || 0);
 
-    const lines = form.items.map((item) => {
-      const quantity = Number(item.quantity || 0);
-      const unit_price = Number(item.unit_price || 0);
-      return quantity * unit_price;
-    });
-
-    const subtotal = lines.reduce((sum, value) => sum + value, 0);
-    const total = subtotal - discount + tax;
+    const subtotal = form.items.reduce((sum, item) => {
+      return sum + Number(item.quantity || 0) * Number(item.unit_price || 0);
+    }, 0);
 
     return {
       subtotal,
-      total
+      total: subtotal - discount + tax
     };
   }, [form]);
 
@@ -258,7 +272,7 @@ export default function InvoicesPage() {
       }
 
       if (!form.warehouse_id) {
-        setError("Le dépôt est obligatoire.");
+        setError("Le depot est obligatoire.");
         return;
       }
 
@@ -270,7 +284,12 @@ export default function InvoicesPage() {
       const normalizedItems = form.items.map((item) => ({
         product_id: Number(item.product_id),
         quantity: Number(item.quantity),
-        unit_price: Number(item.unit_price)
+        unit_price: Number(item.unit_price),
+        stock_form: item.stock_form || undefined,
+        package_size:
+          item.stock_form === "package" ? Number(item.package_size) : undefined,
+        package_unit:
+          item.stock_form === "package" ? item.package_unit : undefined
       }));
 
       const invalidItem = normalizedItems.find(
@@ -280,12 +299,14 @@ export default function InvoicesPage() {
           !Number.isInteger(item.quantity) ||
           item.quantity <= 0 ||
           Number.isNaN(item.unit_price) ||
-          item.unit_price < 0
+          item.unit_price < 0 ||
+          (item.stock_form === "package" &&
+            (!Number.isFinite(item.package_size) || item.package_size <= 0))
       );
 
       if (invalidItem) {
         setError(
-          "Chaque ligne doit avoir un produit valide, une quantité entière positive et un prix unitaire valide."
+          "Chaque ligne doit avoir un produit fini valide, une quantite entiere positive et une variation correcte."
         );
         return;
       }
@@ -306,28 +327,32 @@ export default function InvoicesPage() {
 
       if (accounting?.status === "posted") {
         setSuccessMessage(
-          "Facture créée avec succès et écriture comptable générée."
+          "Facture creee avec succes et ecriture comptable generee."
         );
       } else if (accounting?.status === "skipped") {
         setSuccessMessage(
-          `Facture créée avec succès. Comptabilisation ignorée : ${
-            accounting.reason || "paramétrage manquant"
+          `Facture creee avec succes. Comptabilisation ignoree : ${
+            accounting.reason || "parametrage manquant"
           }.`
         );
       } else if (accounting?.status === "error") {
         setSuccessMessage(
-          `Facture créée avec succès. Comptabilisation en erreur : ${
+          `Facture creee avec succes. Comptabilisation en erreur : ${
             accounting.reason || "erreur inconnue"
           }.`
         );
       } else {
-        setSuccessMessage("Facture créée avec succès.");
+        setSuccessMessage("Facture creee avec succes.");
       }
 
       resetForm();
       await fetchInitialData();
     } catch (err) {
-      setError(err?.message || "Erreur lors de la création de la facture.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Erreur lors de la creation de la facture."
+      );
     } finally {
       setSubmitLoading(false);
     }
@@ -341,7 +366,11 @@ export default function InvoicesPage() {
       const response = await api.get(`/invoices/${invoiceId}`);
       setSelectedInvoice(response.data.data || null);
     } catch (err) {
-      setError(err?.message || "Impossible de charger le détail de la facture.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de charger le detail de la facture."
+      );
     } finally {
       setDetailsLoading(false);
     }
@@ -371,7 +400,7 @@ export default function InvoicesPage() {
     <div className="space-y-8">
       <SectionTitle
         title="Factures"
-        subtitle="Création et suivi des factures clients"
+        subtitle="Creation et suivi des factures clients. Seuls les produits finis sont vendables."
       />
 
       {error ? (
@@ -386,9 +415,9 @@ export default function InvoicesPage() {
         </div>
       ) : null}
 
-      <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
+      <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
         <div className="mb-5 text-lg font-semibold text-slate-900">
-          Créer une facture
+          Creer une facture
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -403,7 +432,7 @@ export default function InvoicesPage() {
                 onChange={handleFormChange}
                 className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
               >
-                <option value="">Sélectionner</option>
+                <option value="">Selectionner</option>
                 {customers.map((customer) => (
                   <option key={customer.id} value={customer.id}>
                     {customer.business_name}
@@ -414,7 +443,7 @@ export default function InvoicesPage() {
 
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">
-                Dépôt *
+                Depot *
               </label>
               <select
                 name="warehouse_id"
@@ -423,23 +452,13 @@ export default function InvoicesPage() {
                 disabled={Boolean(selectedCustomerWarehouseId)}
                 className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500 disabled:bg-slate-100 disabled:text-slate-500"
               >
-                <option value="">Sélectionner</option>
+                <option value="">Selectionner</option>
                 {availableWarehouses.map((warehouse) => (
                   <option key={warehouse.id} value={warehouse.id}>
                     {warehouse.name} - {warehouse.city}
                   </option>
                 ))}
               </select>
-
-              {selectedCustomerWarehouseId ? (
-                <p className="mt-2 text-xs text-slate-500">
-                  Dépôt affecté automatiquement selon le point de vente sélectionné.
-                </p>
-              ) : (
-                <p className="mt-2 text-xs text-amber-600">
-                  Aucun dépôt lié trouvé pour ce client. Sélection manuelle requise.
-                </p>
-              )}
             </div>
 
             <div>
@@ -501,6 +520,11 @@ export default function InvoicesPage() {
             </div>
           </div>
 
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            La facture impacte le stock des produits finis. Si un produit existe en plusieurs
+            variantes de stock, vous pouvez preciser vrac ou paquet par ligne.
+          </div>
+
           <div>
             <div className="mb-4 flex items-center justify-between">
               <div className="text-base font-semibold text-slate-900">
@@ -519,11 +543,11 @@ export default function InvoicesPage() {
               {form.items.map((item, index) => (
                 <div
                   key={index}
-                  className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 p-4 md:grid-cols-4"
+                  className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 p-4 md:grid-cols-5"
                 >
                   <div>
                     <label className="mb-2 block text-sm font-medium text-slate-700">
-                      Produit
+                      Produit fini
                     </label>
                     <select
                       value={item.product_id}
@@ -532,8 +556,8 @@ export default function InvoicesPage() {
                       }
                       className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                     >
-                      <option value="">Sélectionner</option>
-                      {products.map((product) => (
+                      <option value="">Selectionner</option>
+                      {saleProducts.map((product) => (
                         <option key={product.id} value={product.id}>
                           {product.name} ({product.sku})
                         </option>
@@ -543,7 +567,7 @@ export default function InvoicesPage() {
 
                   <div>
                     <label className="mb-2 block text-sm font-medium text-slate-700">
-                      Quantité
+                      Quantite
                     </label>
                     <input
                       type="number"
@@ -574,6 +598,23 @@ export default function InvoicesPage() {
                     />
                   </div>
 
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Variation stock
+                    </label>
+                    <select
+                      value={item.stock_form}
+                      onChange={(e) =>
+                        handleItemChange(index, "stock_form", e.target.value)
+                      }
+                      className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                    >
+                      <option value="">Auto</option>
+                      <option value="bulk">Vrac</option>
+                      <option value="package">Paquet</option>
+                    </select>
+                  </div>
+
                   <div className="flex items-end">
                     <button
                       type="button"
@@ -583,6 +624,45 @@ export default function InvoicesPage() {
                       Supprimer ligne
                     </button>
                   </div>
+
+                  {item.stock_form === "package" ? (
+                    <>
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-slate-700">
+                          Taille paquet
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.package_size}
+                          onChange={(e) =>
+                            handleItemChange(index, "package_size", e.target.value)
+                          }
+                          className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                          placeholder="Ex: 25"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-slate-700">
+                          Unite paquet
+                        </label>
+                        <input
+                          value={item.package_unit}
+                          onChange={(e) =>
+                            handleItemChange(index, "package_unit", e.target.value)
+                          }
+                          className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                          placeholder="unit"
+                        />
+                      </div>
+
+                      <div className="md:col-span-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                        Variante choisie : {getVariantLabel(item)}
+                      </div>
+                    </>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -609,7 +689,7 @@ export default function InvoicesPage() {
                 disabled={submitLoading}
                 className="w-full rounded-2xl bg-brand-600 px-5 py-4 text-sm font-semibold text-white disabled:opacity-60"
               >
-                {submitLoading ? "Création..." : "Créer la facture"}
+                {submitLoading ? "Creation..." : "Creer la facture"}
               </button>
             </div>
           </div>
@@ -617,18 +697,18 @@ export default function InvoicesPage() {
       </div>
 
       {selectedInvoice ? (
-        <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
-          <div className="mb-5 flex items-center justify-between gap-3 flex-wrap">
+        <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-lg font-semibold text-slate-900">
-                Détail facture {selectedInvoice.invoice_number}
+                Detail facture {selectedInvoice.invoice_number}
               </div>
               <div className="mt-1 text-sm text-slate-500">
                 {selectedInvoice.customer_name} • {selectedInvoice.warehouse_name}
               </div>
             </div>
 
-            <div className="flex gap-2 items-center">
+            <div className="flex items-center gap-2">
               {getAccountingBadge(selectedInvoice)}
 
               <a
@@ -651,7 +731,7 @@ export default function InvoicesPage() {
 
           {selectedInvoice.accounting_entry_id ? (
             <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-              Écriture comptable liée :{" "}
+              Ecriture comptable liee :{" "}
               <Link
                 to={`/journal-entries/${selectedInvoice.accounting_entry_id}`}
                 className="font-semibold text-brand-700 hover:underline"
@@ -661,7 +741,7 @@ export default function InvoicesPage() {
             </div>
           ) : null}
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-5 mb-6">
+          <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-5">
             <div className="rounded-2xl bg-slate-50 p-4">
               <div className="text-sm text-slate-500">Statut</div>
               <div className="mt-2">
@@ -683,14 +763,14 @@ export default function InvoicesPage() {
             </div>
 
             <div className="rounded-2xl bg-slate-50 p-4">
-              <div className="text-sm text-slate-500">Payé</div>
+              <div className="text-sm text-slate-500">Paye</div>
               <div className="mt-2 text-lg font-bold text-slate-900">
                 {formatMoney(selectedInvoice.paid_amount)}
               </div>
             </div>
 
             <div className="rounded-2xl bg-slate-50 p-4">
-              <div className="text-sm text-slate-500">Solde dû</div>
+              <div className="text-sm text-slate-500">Solde du</div>
               <div className="mt-2 text-lg font-bold text-slate-900">
                 {formatMoney(selectedInvoice.balance_due)}
               </div>
@@ -714,7 +794,13 @@ export default function InvoicesPage() {
             columns={[
               { key: "product_name", label: "Produit" },
               { key: "sku", label: "SKU" },
-              { key: "quantity", label: "Qté" },
+              { key: "product_role", label: "Role" },
+              { key: "quantity", label: "Qte" },
+              {
+                key: "stock_form",
+                label: "Variante stock",
+                render: (row) => getVariantLabel(row)
+              },
               {
                 key: "unit_price",
                 label: "P.U.",
@@ -724,23 +810,13 @@ export default function InvoicesPage() {
                 key: "line_total",
                 label: "Total",
                 render: (row) => formatMoney(row.line_total)
-              },
-              {
-                key: "line_cogs_amount",
-                label: "COGS",
-                render: (row) => formatMoney(row.line_cogs_amount)
-              },
-              {
-                key: "line_gross_profit_amount",
-                label: "Profit brut",
-                render: (row) => formatMoney(row.line_gross_profit_amount)
               }
             ]}
           />
         </div>
       ) : null}
 
-      <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
+      <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="text-lg font-semibold text-slate-900">
             Liste des factures
@@ -750,7 +826,7 @@ export default function InvoicesPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Rechercher une facture..."
-            className="w-full md:w-80 rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+            className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500 md:w-80"
           />
         </div>
 
@@ -763,11 +839,11 @@ export default function InvoicesPage() {
             <TableCard
               title={`Factures (${filteredInvoices.length})`}
               rows={filteredInvoices}
-              emptyText="Aucune facture trouvée"
+              emptyText="Aucune facture trouvee"
               columns={[
                 { key: "invoice_number", label: "Facture" },
                 { key: "customer_name", label: "Client" },
-                { key: "warehouse_name", label: "Dépôt" },
+                { key: "warehouse_name", label: "Depot" },
                 { key: "invoice_date", label: "Date" },
                 {
                   key: "status",

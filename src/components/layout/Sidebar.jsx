@@ -24,7 +24,8 @@ import {
   SlidersHorizontal,
   Target,
   ShieldAlert,
-  DatabaseZap
+  DatabaseZap,
+  Radar
 } from "lucide-react";
 
 const mainLinks = [
@@ -67,6 +68,7 @@ const accountingLinks = [
 ];
 
 const aiLinks = [
+  { to: "/ai-control-tower", label: "Tour de contrôle IA", icon: Radar },
   { to: "/ai-reasoning", label: "Assistant Direction IA", icon: Brain },
   { to: "/kabot", label: "KABOT Dashboard", icon: ShieldAlert },
   {

@@ -837,10 +837,22 @@ export default function AIReasoningPage() {
             rows={history}
             emptyText="Aucune question posée pour le moment"
             columns={[
-              { key: "question", label: "Question" },
-              { key: "intent", label: "Intention" },
+              {
+                key: "question",
+                label: "Question",
+                render: (row) => row.question || row.request_text || "-"
+              },
+              {
+                key: "intent",
+                label: "Intention",
+                render: (row) => row.intent || row.target_domain || "-"
+              },
               { key: "summary", label: "Résumé" },
-              { key: "created_at", label: "Date" }
+              {
+                key: "created_at",
+                label: "Date",
+                render: (row) => row.created_at || row.started_at || "-"
+              }
             ]}
           />
         )}
