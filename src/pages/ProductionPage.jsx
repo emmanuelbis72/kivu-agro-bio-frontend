@@ -18,18 +18,28 @@ const batchInitial = {
   notes: ""
 };
 
+const quantityUnitOptions = [
+  { value: "g", label: "g" },
+  { value: "kg", label: "kg" },
+  { value: "ml", label: "ml" },
+  { value: "l", label: "l" },
+  { value: "unit", label: "unit" }
+];
+
 function productLabel(product) {
   return `${product.name}${product.sku ? ` (${product.sku})` : ""}`;
 }
 
-function badgeClass(type) {
-  const value = String(type || "").toLowerCase();
+function normalizeUnit(unit) {
+  return String(unit || "unit").trim().toLowerCase();
+}
 
-  if (value === "raw_material") {
+function unitBadgeClass(unit) {
+  if (["g", "kg"].includes(normalizeUnit(unit))) {
     return "bg-amber-100 text-amber-700";
   }
 
-  if (value === "packaging_material") {
+  if (["ml", "l"].includes(normalizeUnit(unit))) {
     return "bg-blue-100 text-blue-700";
   }
 
@@ -57,18 +67,13 @@ export default function ProductionPage() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  const rawMaterials = useMemo(
-    () =>
-      products.filter(
-        (item) =>
-          item.product_type === "raw_material" ||
-          item.product_type === "packaging_material"
-      ),
+  const componentProducts = useMemo(
+    () => products.filter((item) => item.is_active !== false),
     [products]
   );
 
   const finishedProducts = useMemo(
-    () => products.filter((item) => item.product_type === "finished_product"),
+    () => products.filter((item) => item.is_active !== false),
     [products]
   );
 
@@ -87,7 +92,11 @@ export default function ProductionPage() {
       setWarehouses(warehousesRes.data.data || []);
       setBatches(batchesRes.data.data || []);
     } catch (err) {
-      setError(err?.message || "Impossible de charger les données de production.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de charger les données de production."
+      );
     } finally {
       setLoading(false);
     }
@@ -110,7 +119,11 @@ export default function ProductionPage() {
       const response = await api.get(`/production/recipes/${finishedProductId}`);
       setRecipeRows(response.data.data || []);
     } catch (err) {
-      setError(err?.message || "Impossible de charger la recette.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de charger la recette."
+      );
     } finally {
       setRecipeLoading(false);
     }
@@ -121,7 +134,11 @@ export default function ProductionPage() {
       const response = await api.get("/production/batches");
       setBatches(response.data.data || []);
     } catch (err) {
-      setError(err?.message || "Impossible de charger les batches.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de charger les batches."
+      );
     }
   }
 
@@ -133,7 +150,11 @@ export default function ProductionPage() {
       const response = await api.get(`/production/batches/${batchId}`);
       setSelectedBatch(response.data.data || null);
     } catch (err) {
-      setError(err?.message || "Impossible de charger le détail du batch.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de charger le détail du batch."
+      );
     } finally {
       setBatchDetailsLoading(false);
     }
@@ -179,6 +200,21 @@ export default function ProductionPage() {
         quantity_unit: recipeForm.quantity_unit
       };
 
+      if (!payload.finished_product_id) {
+        setError("Le produit à fabriquer est obligatoire.");
+        return;
+      }
+
+      if (!payload.component_product_id) {
+        setError("Le composant est obligatoire.");
+        return;
+      }
+
+      if (!Number.isFinite(payload.quantity_required) || payload.quantity_required <= 0) {
+        setError("La quantité requise doit être supérieure à 0.");
+        return;
+      }
+
       await api.post("/production/recipes", payload);
 
       setSuccessMessage("Ligne de recette enregistrée avec succès.");
@@ -191,7 +227,11 @@ export default function ProductionPage() {
         await fetchRecipes(payload.finished_product_id);
       }
     } catch (err) {
-      setError(err?.message || "Impossible d’enregistrer la recette.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible d’enregistrer la recette."
+      );
     } finally {
       setSubmitLoading(false);
     }
@@ -209,7 +249,11 @@ export default function ProductionPage() {
         await fetchRecipes(selectedFinishedProductId);
       }
     } catch (err) {
-      setError(err?.message || "Impossible de supprimer cette ligne.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de supprimer cette ligne."
+      );
     }
   }
 
@@ -229,6 +273,21 @@ export default function ProductionPage() {
         notes: batchForm.notes.trim()
       };
 
+      if (!payload.warehouse_id) {
+        setError("Le dépôt est obligatoire.");
+        return;
+      }
+
+      if (!payload.finished_product_id) {
+        setError("Le produit à fabriquer est obligatoire.");
+        return;
+      }
+
+      if (!Number.isFinite(payload.quantity_produced) || payload.quantity_produced <= 0) {
+        setError("La quantité produite doit être supérieure à 0.");
+        return;
+      }
+
       const response = await api.post("/production/batches", payload);
 
       setSuccessMessage("Batch de production enregistré avec succès.");
@@ -243,7 +302,11 @@ export default function ProductionPage() {
         await handleLoadBatchDetails(response.data.data.id);
       }
     } catch (err) {
-      setError(err?.message || "Impossible d’enregistrer le batch.");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible d’enregistrer le batch."
+      );
     } finally {
       setSubmitLoading(false);
     }
@@ -274,8 +337,8 @@ export default function ProductionPage() {
   return (
     <div className="space-y-8">
       <SectionTitle
-        title="Production / Conditionnement"
-        subtitle="Recettes, fabrications, produits mélanges et sorties de vrac vers produits finis"
+        title="Production"
+        subtitle="Recettes de fabrication et batches de production en vrac. Le conditionnement en paquet se gère maintenant dans le module stock."
       />
 
       {error ? (
@@ -320,7 +383,7 @@ export default function ProductionPage() {
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Produit fini à configurer
+                  Produit à configurer
                 </label>
                 <select
                   value={selectedFinishedProductId}
@@ -337,13 +400,18 @@ export default function ProductionPage() {
               </div>
             </div>
 
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              Une recette définit quels produits sont consommés pour fabriquer un autre produit.
+              La sortie en paquets se fait ensuite dans le module stock via la transformation vrac vers paquet.
+            </div>
+
             <form
               onSubmit={handleRecipeSubmit}
               className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4"
             >
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Produit fini *
+                  Produit fabriqué *
                 </label>
                 <select
                   name="finished_product_id"
@@ -371,7 +439,7 @@ export default function ProductionPage() {
                   className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                 >
                   <option value="">Sélectionner</option>
-                  {rawMaterials.map((product) => (
+                  {componentProducts.map((product) => (
                     <option key={product.id} value={product.id}>
                       {productLabel(product)}
                     </option>
@@ -405,11 +473,11 @@ export default function ProductionPage() {
                   onChange={handleRecipeFormChange}
                   className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                 >
-                  <option value="g">g</option>
-                  <option value="kg">kg</option>
-                  <option value="ml">ml</option>
-                  <option value="l">l</option>
-                  <option value="unit">unit</option>
+                  {quantityUnitOptions.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -437,20 +505,20 @@ export default function ProductionPage() {
                   { key: "component_product_name", label: "Composant" },
                   { key: "component_product_sku", label: "SKU" },
                   {
-                    key: "component_product_type",
-                    label: "Type",
+                    key: "component_unit",
+                    label: "Unité produit",
                     render: (row) => (
                       <span
-                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${badgeClass(
-                          row.component_product_type
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${unitBadgeClass(
+                          row.component_unit
                         )}`}
                       >
-                        {row.component_product_type}
+                        {row.component_unit || "unit"}
                       </span>
                     )
                   },
                   { key: "quantity_required", label: "Quantité requise" },
-                  { key: "quantity_unit", label: "Unité" },
+                  { key: "quantity_unit", label: "Unité recette" },
                   {
                     key: "actions",
                     label: "Actions",
@@ -469,101 +537,108 @@ export default function ProductionPage() {
             )}
           </div>
         ) : (
-          <form
-            onSubmit={handleBatchSubmit}
-            className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4"
-          >
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                Dépôt *
-              </label>
-              <select
-                name="warehouse_id"
-                value={batchForm.warehouse_id}
-                onChange={handleBatchFormChange}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-              >
-                <option value="">Sélectionner</option>
-                {warehouses.map((warehouse) => (
-                  <option key={warehouse.id} value={warehouse.id}>
-                    {warehouse.name} - {warehouse.city}
-                  </option>
-                ))}
-              </select>
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              Le batch de production consomme les composants définis dans la recette et produit le résultat en stock vrac.
+              Si vous voulez ensuite faire des paquets, utilisez la transformation dans la page stock.
             </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                Produit fini *
-              </label>
-              <select
-                name="finished_product_id"
-                value={batchForm.finished_product_id}
-                onChange={handleBatchFormChange}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-              >
-                <option value="">Sélectionner</option>
-                {finishedProducts.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {productLabel(product)}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <form
+              onSubmit={handleBatchSubmit}
+              className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4"
+            >
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Dépôt *
+                </label>
+                <select
+                  name="warehouse_id"
+                  value={batchForm.warehouse_id}
+                  onChange={handleBatchFormChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Sélectionner</option>
+                  {warehouses.map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name} - {warehouse.city}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                Quantité produite *
-              </label>
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                name="quantity_produced"
-                value={batchForm.quantity_produced}
-                onChange={handleBatchFormChange}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-                placeholder="100"
-              />
-            </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Produit fabriqué *
+                </label>
+                <select
+                  name="finished_product_id"
+                  value={batchForm.finished_product_id}
+                  onChange={handleBatchFormChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Sélectionner</option>
+                  {finishedProducts.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {productLabel(product)}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                Date de production
-              </label>
-              <input
-                type="date"
-                name="production_date"
-                value={batchForm.production_date}
-                onChange={handleBatchFormChange}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-              />
-            </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Quantité produite *
+                </label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  name="quantity_produced"
+                  value={batchForm.quantity_produced}
+                  onChange={handleBatchFormChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                  placeholder="100"
+                />
+              </div>
 
-            <div className="md:col-span-2 xl:col-span-4">
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                Notes
-              </label>
-              <textarea
-                name="notes"
-                value={batchForm.notes}
-                onChange={handleBatchFormChange}
-                rows="3"
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-                placeholder="Conditionnement, fabrication mélange, lot de production..."
-              />
-            </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date de production
+                </label>
+                <input
+                  type="date"
+                  name="production_date"
+                  value={batchForm.production_date}
+                  onChange={handleBatchFormChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
 
-            <div className="md:col-span-2 xl:col-span-4">
-              <button
-                type="submit"
-                disabled={submitLoading}
-                className="rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                {submitLoading ? "Enregistrement..." : "Créer le batch"}
-              </button>
-            </div>
-          </form>
+              <div className="md:col-span-2 xl:col-span-4">
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Notes
+                </label>
+                <textarea
+                  name="notes"
+                  value={batchForm.notes}
+                  onChange={handleBatchFormChange}
+                  rows="3"
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                  placeholder="Fabrication d’un lot, préparation d’un mélange..."
+                />
+              </div>
+
+              <div className="md:col-span-2 xl:col-span-4">
+                <button
+                  type="submit"
+                  disabled={submitLoading}
+                  className="rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {submitLoading ? "Enregistrement..." : "Créer le batch"}
+                </button>
+              </div>
+            </form>
+          </div>
         )}
       </div>
 
@@ -604,11 +679,11 @@ export default function ProductionPage() {
                   </button>
                 )
               },
-              { key: "finished_product_name", label: "Produit fini" },
+              { key: "finished_product_name", label: "Produit fabriqué" },
               { key: "finished_product_sku", label: "SKU" },
               { key: "warehouse_name", label: "Dépôt" },
               { key: "quantity_produced", label: "Qté produite" },
-              { key: "finished_product_stock_unit", label: "Unité stock" },
+              { key: "finished_product_unit", label: "Unité produit" },
               { key: "components_count", label: "Composants" },
               { key: "production_date", label: "Date" },
               { key: "status", label: "Statut" }
@@ -631,7 +706,8 @@ export default function ProductionPage() {
                 Détail batch {selectedBatch.batch_number}
               </div>
               <div className="mt-1 text-sm text-slate-500">
-                {selectedBatch.finished_product_name} • {selectedBatch.warehouse_name} - {selectedBatch.warehouse_city}
+                {selectedBatch.finished_product_name} • {selectedBatch.warehouse_name} -{" "}
+                {selectedBatch.warehouse_city}
               </div>
             </div>
 
@@ -653,7 +729,7 @@ export default function ProductionPage() {
             </div>
 
             <div className="rounded-2xl bg-slate-50 p-4">
-              <div className="text-sm text-slate-500">Produit fini</div>
+              <div className="text-sm text-slate-500">Produit fabriqué</div>
               <div className="mt-2 text-lg font-bold text-slate-900">
                 {selectedBatch.finished_product_name}
               </div>
@@ -688,20 +764,20 @@ export default function ProductionPage() {
               { key: "component_product_name", label: "Composant" },
               { key: "component_product_sku", label: "SKU" },
               {
-                key: "component_product_type",
-                label: "Type",
+                key: "component_unit",
+                label: "Unité produit",
                 render: (row) => (
                   <span
-                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${badgeClass(
-                      row.component_product_type
+                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${unitBadgeClass(
+                      row.component_unit
                     )}`}
                   >
-                    {row.component_product_type}
+                    {row.component_unit || "unit"}
                   </span>
                 )
               },
               { key: "quantity_consumed", label: "Qté consommée" },
-              { key: "quantity_unit", label: "Unité" },
+              { key: "quantity_unit", label: "Unité recette" },
               { key: "unit_cost", label: "Coût unitaire" }
             ]}
           />

@@ -31,10 +31,14 @@ const mainLinks = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/products", label: "Produits", icon: Package },
   { to: "/warehouses", label: "Dépôts", icon: Warehouse },
-  { to: "/stock", label: "Stock", icon: Boxes },
+  {
+    to: "/stock",
+    label: "Stock / Transformations",
+    icon: Boxes
+  },
   {
     to: "/production",
-    label: "Production / Conditionnement",
+    label: "Production / Recettes",
     icon: Factory
   },
   { to: "/customers", label: "Clients", icon: Users },
@@ -126,8 +130,8 @@ export default function Sidebar() {
           Gestion Pro
         </div>
         <div className="mt-1 text-sm text-slate-500">
-          Stock, ventes, dépenses, facturation, comptabilité et intelligence
-          artificielle
+          Catalogue produits, stock intelligent, recettes, ventes, dépenses,
+          comptabilité et intelligence artificielle
         </div>
       </div>
 

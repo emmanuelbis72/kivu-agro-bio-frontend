@@ -1,9 +1,7 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
-// Layout
 import MainLayout from "./components/layout/MainLayout";
 
-// Pages
 import DashboardPage from "./pages/DashboardPage";
 import AccountingDashboardPage from "./pages/AccountingDashboardPage";
 import AIReasoningPage from "./pages/AIReasoningPage";
@@ -45,6 +43,7 @@ export default function App() {
           <Route path="warehouses" element={<WarehousesPage />} />
           <Route path="stock" element={<StockPage />} />
           <Route path="production" element={<ProductionPage />} />
+
           <Route path="customers" element={<CustomersPage />} />
           <Route path="invoices" element={<InvoicesPage />} />
           <Route path="payments" element={<PaymentsPage />} />
