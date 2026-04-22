@@ -388,9 +388,15 @@ export default function AIReasoningPage() {
       });
       setResult(normalizeCEOBriefPayload(response.data.data || {}));
     } catch (err) {
+      const looksLikeNetworkTimeout =
+        String(err?.message || "").toLowerCase().includes("network error") ||
+        String(err?.code || "").toUpperCase() === "ECONNABORTED";
+
       setError(
         err?.response?.data?.message ||
-          err?.message ||
+          (looksLikeNetworkTimeout
+            ? "Le brief CEO a ete interrompu par le reseau ou le proxy avant la reponse complete. Le backend a maintenant un fallback plus rapide ; reessayez apres redeploiement."
+            : err?.message) ||
           "Impossible de charger le brief CEO."
       );
     } finally {
