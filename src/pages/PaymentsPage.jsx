@@ -69,9 +69,12 @@ export default function PaymentsPage() {
   const [invoices, setInvoices] = useState([]);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [payments, setPayments] = useState([]);
+  const [unallocatedPayments, setUnallocatedPayments] = useState([]);
+  const [selectedUnallocatedPayment, setSelectedUnallocatedPayment] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [unallocatedLoading, setUnallocatedLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
 
   const [form, setForm] = useState(initialForm);
@@ -85,13 +88,22 @@ export default function PaymentsPage() {
     return response.data.data || [];
   }
 
+  async function fetchUnallocatedPayments() {
+    const response = await api.get("/payments/unallocated?state=pending&limit=200");
+    return response.data.data || [];
+  }
+
   async function loadInitialData() {
     try {
       setLoading(true);
       setError("");
 
-      const invoicesData = await fetchInvoices();
+      const [invoicesData, pendingPaymentsData] = await Promise.all([
+        fetchInvoices(),
+        fetchUnallocatedPayments()
+      ]);
       setInvoices(invoicesData);
+      setUnallocatedPayments(pendingPaymentsData);
     } catch (err) {
       setError(err?.message || "Impossible de charger les données de paiement.");
     } finally {
@@ -135,7 +147,9 @@ export default function PaymentsPage() {
         ...prev,
         invoice_id: String(invoiceId),
         amount:
-          invoiceData && Number(invoiceData.balance_due) > 0
+          selectedUnallocatedPayment
+            ? prev.amount
+            : invoiceData && Number(invoiceData.balance_due) > 0
             ? String(Number(invoiceData.balance_due))
             : ""
       }));
@@ -167,18 +181,51 @@ export default function PaymentsPage() {
       reference: "",
       notes: ""
     }));
+    setSelectedUnallocatedPayment(null);
   }
 
   async function refreshSelectedInvoice(invoiceId) {
-    const [invoiceRes, paymentsRes, invoicesData] = await Promise.all([
+    const [invoiceRes, paymentsRes, invoicesData, pendingPaymentsData] = await Promise.all([
       api.get(`/invoices/${invoiceId}`),
       api.get(`/payments/invoice/${invoiceId}`),
-      fetchInvoices()
+      fetchInvoices(),
+      fetchUnallocatedPayments()
     ]);
 
     setSelectedInvoice(invoiceRes.data.data || null);
     setPayments(paymentsRes.data.data || []);
     setInvoices(invoicesData || []);
+    setUnallocatedPayments(pendingPaymentsData || []);
+  }
+
+  async function refreshUnallocatedPayments() {
+    try {
+      setUnallocatedLoading(true);
+      const pendingPaymentsData = await fetchUnallocatedPayments();
+      setUnallocatedPayments(pendingPaymentsData);
+    } catch (err) {
+      setError(err?.message || "Impossible de charger les paiements importes.");
+    } finally {
+      setUnallocatedLoading(false);
+    }
+  }
+
+  function handleUseUnallocatedPayment(row) {
+    setSelectedUnallocatedPayment(row);
+    setForm((prev) => ({
+      ...prev,
+      payment_date: String(row.payment_date || "").slice(0, 10),
+      amount: String(Number(row.amount || 0)),
+      payment_method:
+        row.payment_method && row.payment_method !== "unknown"
+          ? row.payment_method
+          : "bank_transfer",
+      reference: row.reference || "",
+      notes: row.notes || `Paiement importe client: ${row.raw_customer_name || ""}`
+    }));
+    setSuccessMessage(
+      "Paiement importe charge dans le formulaire. Selectionne maintenant la facture payee, ajuste si besoin, puis enregistre."
+    );
   }
 
   async function handleSubmit(event) {
@@ -230,7 +277,15 @@ export default function PaymentsPage() {
         notes: form.notes.trim()
       };
 
-      const response = await api.post("/payments", payload);
+      const response = selectedUnallocatedPayment
+        ? await api.post(
+            `/payments/unallocated/${selectedUnallocatedPayment.id}/allocate`,
+            {
+              ...payload,
+              raw_customer_name: selectedUnallocatedPayment.raw_customer_name
+            }
+          )
+        : await api.post("/payments", payload);
       const accounting = response?.data?.data?.accounting || null;
 
       if (accounting?.status === "posted") {
@@ -343,6 +398,71 @@ export default function PaymentsPage() {
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-lg font-semibold text-slate-900">
+                  Paiements importes en attente
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  Charge un paiement ici, puis choisis la facture payee.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={refreshUnallocatedPayments}
+                className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"
+              >
+                Actualiser
+              </button>
+            </div>
+
+            {unallocatedLoading ? (
+              <div className="rounded-2xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                Chargement des paiements importes...
+              </div>
+            ) : unallocatedPayments.length === 0 ? (
+              <div className="rounded-2xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                Aucun paiement importe en attente.
+              </div>
+            ) : (
+              <div className="max-h-96 space-y-3 overflow-y-auto pr-1">
+                {unallocatedPayments.map((row) => (
+                  <button
+                    key={row.id}
+                    type="button"
+                    onClick={() => handleUseUnallocatedPayment(row)}
+                    className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                      selectedUnallocatedPayment?.id === row.id
+                        ? "border-brand-500 bg-brand-50"
+                        : "border-slate-200 bg-white hover:border-brand-300"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-semibold text-slate-900">
+                          {row.raw_customer_name}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {String(row.payment_date || "").slice(0, 10)} -{" "}
+                          {row.matched_customer_name || "Client a verifier"}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-bold text-slate-900">
+                          {formatMoney(row.amount)}
+                        </div>
+                        <div className="mt-1 text-xs text-brand-700">
+                          Utiliser
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
