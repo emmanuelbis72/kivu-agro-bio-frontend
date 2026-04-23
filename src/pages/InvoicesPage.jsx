@@ -98,6 +98,7 @@ export default function InvoicesPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [search, setSearch] = useState("");
   const [form, setForm] = useState(initialForm);
+  const [editingInvoiceId, setEditingInvoiceId] = useState(null);
 
   const pdfBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
@@ -139,6 +140,7 @@ export default function InvoicesPage() {
       invoice_date: new Date().toISOString().split("T")[0],
       items: [{ ...initialItem }]
     });
+    setEditingInvoiceId(null);
   }
 
   const saleProducts = useMemo(
@@ -322,27 +324,35 @@ export default function InvoicesPage() {
         items: normalizedItems
       };
 
-      const response = await api.post("/invoices", payload);
+      const response = editingInvoiceId
+        ? await api.put(`/invoices/${editingInvoiceId}`, payload)
+        : await api.post("/invoices", payload);
       const accounting = response?.data?.data?.accounting || null;
 
       if (accounting?.status === "posted") {
         setSuccessMessage(
-          "Facture creee avec succes et ecriture comptable generee."
+          editingInvoiceId
+            ? "Facture modifiee avec succes et ecriture comptable generee."
+            : "Facture creee avec succes et ecriture comptable generee."
         );
       } else if (accounting?.status === "skipped") {
         setSuccessMessage(
-          `Facture creee avec succes. Comptabilisation ignoree : ${
+          `${editingInvoiceId ? "Facture modifiee" : "Facture creee"} avec succes. Comptabilisation ignoree : ${
             accounting.reason || "parametrage manquant"
           }.`
         );
       } else if (accounting?.status === "error") {
         setSuccessMessage(
-          `Facture creee avec succes. Comptabilisation en erreur : ${
+          `${editingInvoiceId ? "Facture modifiee" : "Facture creee"} avec succes. Comptabilisation en erreur : ${
             accounting.reason || "erreur inconnue"
           }.`
         );
       } else {
-        setSuccessMessage("Facture creee avec succes.");
+        setSuccessMessage(
+          editingInvoiceId
+            ? "Facture modifiee avec succes."
+            : "Facture creee avec succes."
+        );
       }
 
       resetForm();
@@ -370,6 +380,95 @@ export default function InvoicesPage() {
         err?.response?.data?.message ||
           err?.message ||
           "Impossible de charger le detail de la facture."
+      );
+    } finally {
+      setDetailsLoading(false);
+    }
+  }
+
+  async function handleEditInvoice(invoiceId) {
+    try {
+      setDetailsLoading(true);
+      setError("");
+      setSuccessMessage("");
+
+      const response = await api.get(`/invoices/${invoiceId}`);
+      const invoice = response.data.data || null;
+
+      if (!invoice) {
+        setError("Facture introuvable.");
+        return;
+      }
+
+      if (Number(invoice.paid_amount || 0) > 0) {
+        setError("Impossible de modifier une facture qui possede deja un paiement.");
+        return;
+      }
+
+      setEditingInvoiceId(invoice.id);
+      setSelectedInvoice(invoice);
+      setForm({
+        customer_id: String(invoice.customer_id || ""),
+        warehouse_id: String(invoice.warehouse_id || ""),
+        invoice_date: String(invoice.invoice_date || "").slice(0, 10),
+        discount_amount: String(Number(invoice.discount_amount || 0)),
+        tax_amount: String(Number(invoice.tax_amount || 0)),
+        notes: invoice.notes || "",
+        items: (invoice.items || []).map((item) => ({
+          product_id: String(item.product_id || ""),
+          quantity: String(Number(item.quantity || 0)),
+          unit_price: String(Number(item.unit_price || 0)),
+          stock_form: item.stock_form || "",
+          package_size:
+            item.package_size === null || item.package_size === undefined
+              ? ""
+              : String(Number(item.package_size)),
+          package_unit: item.package_unit || "unit"
+        }))
+      });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de charger la facture a modifier."
+      );
+    } finally {
+      setDetailsLoading(false);
+    }
+  }
+
+  async function handleDeleteInvoice(invoiceId) {
+    const confirmed = window.confirm(
+      "Supprimer cette facture ? Le stock sorti par cette facture sera remis. Cette action est definitive."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDetailsLoading(true);
+      setError("");
+      setSuccessMessage("");
+
+      await api.delete(`/invoices/${invoiceId}`);
+
+      if (editingInvoiceId === invoiceId) {
+        resetForm();
+      }
+
+      if (selectedInvoice?.id === invoiceId) {
+        setSelectedInvoice(null);
+      }
+
+      setSuccessMessage("Facture supprimee avec succes.");
+      await fetchInitialData();
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de supprimer cette facture."
       );
     } finally {
       setDetailsLoading(false);
@@ -416,8 +515,26 @@ export default function InvoicesPage() {
       ) : null}
 
       <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
-        <div className="mb-5 text-lg font-semibold text-slate-900">
-          Creer une facture
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-lg font-semibold text-slate-900">
+              {editingInvoiceId ? "Modifier la facture" : "Creer une facture"}
+            </div>
+            {editingInvoiceId ? (
+              <div className="mt-1 text-sm text-amber-700">
+                Mode edition actif. Le stock de l'ancienne facture sera corrige automatiquement.
+              </div>
+            ) : null}
+          </div>
+          {editingInvoiceId ? (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="rounded-2xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
+            >
+              Annuler la modification
+            </button>
+          ) : null}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -689,7 +806,13 @@ export default function InvoicesPage() {
                 disabled={submitLoading}
                 className="w-full rounded-2xl bg-brand-600 px-5 py-4 text-sm font-semibold text-white disabled:opacity-60"
               >
-                {submitLoading ? "Creation..." : "Creer la facture"}
+                {submitLoading
+                  ? editingInvoiceId
+                    ? "Modification..."
+                    : "Creation..."
+                  : editingInvoiceId
+                    ? "Modifier la facture"
+                    : "Creer la facture"}
               </button>
             </div>
           </div>
@@ -719,6 +842,20 @@ export default function InvoicesPage() {
               >
                 Ouvrir le PDF
               </a>
+
+              <button
+                onClick={() => handleEditInvoice(selectedInvoice.id)}
+                className="rounded-2xl border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-700"
+              >
+                Modifier
+              </button>
+
+              <button
+                onClick={() => handleDeleteInvoice(selectedInvoice.id)}
+                className="rounded-2xl border border-red-300 px-4 py-2 text-sm font-semibold text-red-700"
+              >
+                Supprimer
+              </button>
 
               <button
                 onClick={() => setSelectedInvoice(null)}
@@ -877,12 +1014,26 @@ export default function InvoicesPage() {
                   key: "actions",
                   label: "Actions",
                   render: (row) => (
-                    <button
-                      onClick={() => handleViewInvoice(row.id)}
-                      className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"
-                    >
-                      Voir
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => handleViewInvoice(row.id)}
+                        className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"
+                      >
+                        Voir
+                      </button>
+                      <button
+                        onClick={() => handleEditInvoice(row.id)}
+                        className="rounded-xl border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-700"
+                      >
+                        Modifier
+                      </button>
+                      <button
+                        onClick={() => handleDeleteInvoice(row.id)}
+                        className="rounded-xl border border-red-300 px-3 py-2 text-xs font-semibold text-red-700"
+                      >
+                        Supprimer
+                      </button>
+                    </div>
                   )
                 }
               ]}
