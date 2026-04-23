@@ -7,10 +7,7 @@ import TableCard from "../components/ui/TableCard";
 const initialItem = {
   product_id: "",
   quantity: "",
-  unit_price: "",
-  stock_form: "",
-  package_size: "",
-  package_unit: "unit"
+  unit_price: ""
 };
 
 const initialForm = {
@@ -72,15 +69,7 @@ function getAccountingBadge(row) {
 }
 
 function getVariantLabel(item) {
-  if (item.stock_form !== "package") {
-    return item.stock_form === "bulk" ? "Vrac" : "Auto";
-  }
-
-  if (item.package_size && item.package_unit) {
-    return `Paquet - ${item.package_size} ${item.package_unit}`;
-  }
-
-  return "Paquet";
+  return item?.product_role === "finished_product" ? "Produit fini" : "Produit";
 }
 
 export default function InvoicesPage() {
@@ -214,11 +203,6 @@ export default function InvoicesPage() {
         [field]: value
       };
 
-      if (field === "stock_form" && value !== "package") {
-        updatedItems[index].package_size = "";
-        updatedItems[index].package_unit = "unit";
-      }
-
       return {
         ...prev,
         items: updatedItems
@@ -286,12 +270,7 @@ export default function InvoicesPage() {
       const normalizedItems = form.items.map((item) => ({
         product_id: Number(item.product_id),
         quantity: Number(item.quantity),
-        unit_price: Number(item.unit_price),
-        stock_form: item.stock_form || undefined,
-        package_size:
-          item.stock_form === "package" ? Number(item.package_size) : undefined,
-        package_unit:
-          item.stock_form === "package" ? item.package_unit : undefined
+        unit_price: Number(item.unit_price)
       }));
 
       const invalidItem = normalizedItems.find(
@@ -301,14 +280,12 @@ export default function InvoicesPage() {
           !Number.isInteger(item.quantity) ||
           item.quantity <= 0 ||
           Number.isNaN(item.unit_price) ||
-          item.unit_price < 0 ||
-          (item.stock_form === "package" &&
-            (!Number.isFinite(item.package_size) || item.package_size <= 0))
+          item.unit_price < 0
       );
 
       if (invalidItem) {
         setError(
-          "Chaque ligne doit avoir un produit fini valide, une quantite entiere positive et une variation correcte."
+          "Chaque ligne doit avoir un produit fini valide, une quantite entiere positive et un prix correct."
         );
         return;
       }
@@ -417,13 +394,7 @@ export default function InvoicesPage() {
         items: (invoice.items || []).map((item) => ({
           product_id: String(item.product_id || ""),
           quantity: String(Number(item.quantity || 0)),
-          unit_price: String(Number(item.unit_price || 0)),
-          stock_form: item.stock_form || "",
-          package_size:
-            item.package_size === null || item.package_size === undefined
-              ? ""
-              : String(Number(item.package_size)),
-          package_unit: item.package_unit || "unit"
+          unit_price: String(Number(item.unit_price || 0))
         }))
       });
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -638,8 +609,8 @@ export default function InvoicesPage() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            La facture impacte le stock des produits finis. Si un produit existe en plusieurs
-            variantes de stock, vous pouvez preciser vrac ou paquet par ligne.
+            La facture impacte uniquement le stock des produits finis. Les lignes de facture
+            sont saisies en pieces, sans option vrac.
           </div>
 
           <div>
@@ -660,7 +631,7 @@ export default function InvoicesPage() {
               {form.items.map((item, index) => (
                 <div
                   key={index}
-                  className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 p-4 md:grid-cols-5"
+                  className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 p-4 md:grid-cols-4"
                 >
                   <div>
                     <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -715,71 +686,22 @@ export default function InvoicesPage() {
                     />
                   </div>
 
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-700">
-                      Variation stock
-                    </label>
-                    <select
-                      value={item.stock_form}
-                      onChange={(e) =>
-                        handleItemChange(index, "stock_form", e.target.value)
-                      }
-                      className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                  <div className="flex items-end gap-2">
+                    <button
+                      type="button"
+                      onClick={addItemRow}
+                      className="flex-1 rounded-2xl border border-brand-300 px-4 py-3 text-sm font-semibold text-brand-700"
                     >
-                      <option value="">Auto</option>
-                      <option value="bulk">Vrac</option>
-                      <option value="package">Paquet</option>
-                    </select>
-                  </div>
-
-                  <div className="flex items-end">
+                      + Ajouter ligne
+                    </button>
                     <button
                       type="button"
                       onClick={() => removeItemRow(index)}
-                      className="w-full rounded-2xl border border-red-300 px-4 py-3 text-sm font-semibold text-red-700"
+                      className="flex-1 rounded-2xl border border-red-300 px-4 py-3 text-sm font-semibold text-red-700"
                     >
-                      Supprimer ligne
+                      Supprimer
                     </button>
                   </div>
-
-                  {item.stock_form === "package" ? (
-                    <>
-                      <div>
-                        <label className="mb-2 block text-sm font-medium text-slate-700">
-                          Taille paquet
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.package_size}
-                          onChange={(e) =>
-                            handleItemChange(index, "package_size", e.target.value)
-                          }
-                          className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-                          placeholder="Ex: 25"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="mb-2 block text-sm font-medium text-slate-700">
-                          Unite paquet
-                        </label>
-                        <input
-                          value={item.package_unit}
-                          onChange={(e) =>
-                            handleItemChange(index, "package_unit", e.target.value)
-                          }
-                          className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-                          placeholder="unit"
-                        />
-                      </div>
-
-                      <div className="md:col-span-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                        Variante choisie : {getVariantLabel(item)}
-                      </div>
-                    </>
-                  ) : null}
                 </div>
               ))}
             </div>
@@ -811,7 +733,7 @@ export default function InvoicesPage() {
                     ? "Modification..."
                     : "Creation..."
                   : editingInvoiceId
-                    ? "Modifier la facture"
+                    ? "Enregistrer la modification"
                     : "Creer la facture"}
               </button>
             </div>
