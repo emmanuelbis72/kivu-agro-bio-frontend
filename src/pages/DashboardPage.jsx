@@ -65,19 +65,23 @@ function movementTypeLabel(value) {
 
 function stockFormLabel(value) {
   if (value === "package") {
-    return "Paquet";
+    return "Produit fini conditionne";
   }
 
   if (value === "bulk") {
-    return "Vrac";
+    return "Produit fini";
   }
 
   return value || "-";
 }
 
 function packageLabel(row) {
+  if (row.product_role === "finished_product") {
+    return "Produit fini";
+  }
+
   if (row.stock_form !== "package") {
-    return "Vrac";
+    return "Stock";
   }
 
   if (row.package_size && row.package_unit) {
@@ -518,7 +522,7 @@ export default function DashboardPage() {
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
             >
               <option value="">Toutes</option>
-              <option value="bulk">Vrac</option>
+              <option value="bulk">Produit fini</option>
               <option value="package">Paquet</option>
             </select>
           </FilterField>

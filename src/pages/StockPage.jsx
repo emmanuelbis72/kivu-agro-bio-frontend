@@ -108,11 +108,15 @@ function getProductLabel(product) {
 }
 
 function getStockFormLabel(stockForm) {
-  return stockForm === "package" ? "Paquet" : "Vrac";
+  return stockForm === "package" ? "Produit fini conditionne" : "Produit fini";
 }
 
 function getVariantLabel(row) {
   if (!row) return "-";
+
+  if (row.product_role === "finished_product") {
+    return "Produit fini";
+  }
 
   if (row.stock_form === "package") {
     const size = row.package_size ? Number(row.package_size) : null;
@@ -125,7 +129,7 @@ function getVariantLabel(row) {
     return "Paquet";
   }
 
-  return "Vrac";
+  return "Stock";
 }
 
 function getStockDisplay(row) {
@@ -149,7 +153,7 @@ function getMovementQuantityDisplay(row) {
     return `${quantity} paquet(s)${details}`;
   }
 
-  return `${quantity} ${row.unit || "unit"}`;
+  return `${quantity} ${row.unit || "piece"}`;
 }
 
 function buildSkuSuggestion(value) {
@@ -182,7 +186,7 @@ function renderStockFormFields(form, onChange, formKey = "stock_form") {
           onChange={onChange}
           className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
         >
-          <option value="bulk">Vrac</option>
+          <option value="bulk">Produit fini</option>
           <option value="package">Paquet</option>
         </select>
       </div>
@@ -750,7 +754,7 @@ export default function StockPage() {
       };
 
       await api.post("/stock/transform/package", payload);
-      setSuccessMessage("Transformation vrac vers paquet enregistrée avec succès.");
+      setSuccessMessage("Transformation de produit fini enregistrée avec succès.");
       resetForms();
       await fetchStockByWarehouse(selectedWarehouse);
       await fetchMovements();
@@ -758,7 +762,7 @@ export default function StockPage() {
       setError(
         err?.response?.data?.message ||
           err?.message ||
-          "Erreur lors de la transformation vrac vers paquet."
+          "Erreur lors de la transformation du produit fini."
       );
     } finally {
       setSubmitLoading(false);
@@ -1064,7 +1068,7 @@ export default function StockPage() {
 
           <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
             L’entrée en dépôt définit maintenant la forme réelle du stock :
-            vrac ou paquet.
+            produit fini ou conditionne.
           </div>
 
           <div className="md:col-span-2 xl:col-span-3">
@@ -1165,7 +1169,7 @@ export default function StockPage() {
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
             >
               <option value="">Auto / stock unique</option>
-              <option value="bulk">Vrac</option>
+              <option value="bulk">Produit fini</option>
               <option value="package">Paquet</option>
             </select>
           </div>
@@ -1243,7 +1247,7 @@ export default function StockPage() {
 
           <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
             Si plusieurs variantes existent pour un produit dans un dépôt,
-            choisissez explicitement vrac ou paquet.
+            choisissez explicitement le stock produit fini ou conditionne.
           </div>
 
           <div className="md:col-span-2 xl:col-span-3">
@@ -1401,7 +1405,7 @@ export default function StockPage() {
           className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3"
         >
           <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            Utilise cette operation pour convertir un stock vrac en stock paquet.
+            Utilise cette operation pour conditionner un stock de produit fini.
             Le produit source ne peut pas etre un emballage, et le produit cible doit etre un produit fini vendable.
           </div>
 
@@ -1426,7 +1430,7 @@ export default function StockPage() {
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
-              Produit source en vrac *
+              Produit fini source *
             </label>
             <select
               name="source_product_id"
@@ -1464,7 +1468,7 @@ export default function StockPage() {
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
-              Quantité vrac consommée *
+              Quantite de produit fini consommee *
             </label>
             <input
               type="number"
@@ -1554,7 +1558,7 @@ export default function StockPage() {
               onChange={handlePackageTransformChange}
               rows="3"
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-              placeholder="Conditionnement du vrac en produit fini..."
+              placeholder="Conditionnement du produit fini..."
             />
           </div>
 
@@ -1806,7 +1810,7 @@ export default function StockPage() {
           <div>
             <div className="mb-4 flex items-center justify-between">
               <div className="text-base font-semibold text-slate-900">
-                Composants vrac
+                Composants produits finis
               </div>
               <button
                 type="button"
@@ -1825,7 +1829,7 @@ export default function StockPage() {
                 >
                   <div>
                     <label className="mb-2 block text-sm font-medium text-slate-700">
-                      Produit vrac *
+                      Produit composant *
                     </label>
                     <select
                       value={item.product_id}
@@ -2054,7 +2058,7 @@ export default function StockPage() {
                     }
                     className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                   >
-                    <option value="bulk">Vrac</option>
+                    <option value="bulk">Produit fini</option>
                     <option value="package">Paquet</option>
                   </select>
                 </div>
@@ -2169,7 +2173,7 @@ export default function StockPage() {
     <div className="space-y-8">
       <SectionTitle
         title="Stock"
-        subtitle="Organisation professionnelle du stock par depot : le produit porte un role metier, et le stock porte la forme reelle vrac ou paquet"
+        subtitle="Organisation professionnelle du stock par depot : les stocks visibles sont des produits finis et leurs mouvements"
       />
 
       {error ? (
@@ -2185,7 +2189,7 @@ export default function StockPage() {
       ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-        Regle pratique : les matieres premieres et les emballages entrent en stock, les produits finis sont vendables, et la forme vrac ou paquet se choisit au niveau du stock et des mouvements.
+        Regle pratique : les produits visibles en stock et sur facture sont des produits finis vendables.
       </div>
 
       <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
@@ -2194,7 +2198,7 @@ export default function StockPage() {
             ["entry", "Entrée stock"],
             ["exit", "Sortie stock"],
             ["adjustment", "Ajustement"],
-            ["packageTransform", "Vrac -> paquet"],
+            ["packageTransform", "Conditionnement"],
             ["mixture", "Créer mixture"],
             ["transfer", "Transfert inter-dépôts"]
           ].map(([key, label]) => (
