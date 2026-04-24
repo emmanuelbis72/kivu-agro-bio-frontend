@@ -54,14 +54,21 @@ function getAccountingBadge(row) {
   };
 
   return (
-    <span
-      title={row.accounting_message || ""}
-      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-        map[row.accounting_status] || "bg-slate-200 text-slate-700"
-      }`}
-    >
-      {labelMap[row.accounting_status] || row.accounting_status}
-    </span>
+    <div className="space-y-1">
+      <span
+        title={row.accounting_message || ""}
+        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+          map[row.accounting_status] || "bg-slate-200 text-slate-700"
+        }`}
+      >
+        {labelMap[row.accounting_status] || row.accounting_status}
+      </span>
+      {row.accounting_message && row.accounting_status !== "posted" ? (
+        <div className="max-w-[220px] text-xs leading-5 text-slate-500">
+          {row.accounting_message}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -681,7 +688,14 @@ export default function PaymentsPage() {
                 rows={payments}
                 emptyText="Aucun paiement pour cette facture"
                 columns={[
-                  { key: "payment_date", label: "Date" },
+                  {
+                    key: "payment_date",
+                    label: "Date",
+                    render: (row) =>
+                      row.payment_date
+                        ? String(row.payment_date).slice(0, 10)
+                        : "-"
+                  },
                   {
                     key: "amount",
                     label: "Montant",
