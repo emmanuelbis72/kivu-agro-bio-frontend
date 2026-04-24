@@ -96,18 +96,49 @@ export default function InvoicesPage() {
       setLoading(true);
       setError("");
 
-      const [invoicesRes, customersRes, warehousesRes, productsRes] =
-        await Promise.all([
-          api.get("/invoices"),
-          api.get("/customers"),
-          api.get("/warehouses"),
-          api.get("/products")
-        ]);
+      const results = await Promise.allSettled([
+        api.get("/invoices"),
+        api.get("/customers"),
+        api.get("/warehouses"),
+        api.get("/products")
+      ]);
 
-      setInvoices(invoicesRes.data.data || []);
-      setCustomers(customersRes.data.data || []);
-      setWarehouses(warehousesRes.data.data || []);
-      setProducts(productsRes.data.data || []);
+      const [invoicesRes, customersRes, warehousesRes, productsRes] = results;
+      const errors = [];
+
+      if (invoicesRes.status === "fulfilled") {
+        setInvoices(invoicesRes.value.data.data || []);
+      } else {
+        setInvoices([]);
+        errors.push("factures");
+      }
+
+      if (customersRes.status === "fulfilled") {
+        setCustomers(customersRes.value.data.data || []);
+      } else {
+        setCustomers([]);
+        errors.push("clients");
+      }
+
+      if (warehousesRes.status === "fulfilled") {
+        setWarehouses(warehousesRes.value.data.data || []);
+      } else {
+        setWarehouses([]);
+        errors.push("depots");
+      }
+
+      if (productsRes.status === "fulfilled") {
+        setProducts(productsRes.value.data.data || []);
+      } else {
+        setProducts([]);
+        errors.push("produits");
+      }
+
+      if (errors.length > 0) {
+        setError(
+          `Certaines donnees de facturation n ont pas pu etre chargees : ${errors.join(", ")}.`
+        );
+      }
     } catch (err) {
       setError(
         err?.response?.data?.message ||

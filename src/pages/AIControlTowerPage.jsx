@@ -60,13 +60,7 @@ export default function AIControlTowerPage() {
       setLoading(true);
       setError("");
 
-      const [
-        alertsRes,
-        recommendationsRes,
-        historyRes,
-        forecastsRes,
-        customerScoresRes
-      ] = await Promise.all([
+      const results = await Promise.allSettled([
         api.get("/ai/alerts"),
         api.get("/ai/recommendations"),
         api.get("/ai/history"),
@@ -76,11 +70,55 @@ export default function AIControlTowerPage() {
         })
       ]);
 
-      setAlerts(alertsRes.data.data || []);
-      setRecommendations(recommendationsRes.data.data || []);
-      setHistory(historyRes.data.data || []);
-      setForecasts(forecastsRes.data.data || []);
-      setCustomerScores(customerScoresRes.data.data || []);
+      const [
+        alertsRes,
+        recommendationsRes,
+        historyRes,
+        forecastsRes,
+        customerScoresRes
+      ] = results;
+      const errors = [];
+
+      if (alertsRes.status === "fulfilled") {
+        setAlerts(alertsRes.value.data.data || []);
+      } else {
+        setAlerts([]);
+        errors.push("alertes");
+      }
+
+      if (recommendationsRes.status === "fulfilled") {
+        setRecommendations(recommendationsRes.value.data.data || []);
+      } else {
+        setRecommendations([]);
+        errors.push("recommandations");
+      }
+
+      if (historyRes.status === "fulfilled") {
+        setHistory(historyRes.value.data.data || []);
+      } else {
+        setHistory([]);
+        errors.push("historique IA");
+      }
+
+      if (forecastsRes.status === "fulfilled") {
+        setForecasts(forecastsRes.value.data.data || []);
+      } else {
+        setForecasts([]);
+        errors.push("previsions");
+      }
+
+      if (customerScoresRes.status === "fulfilled") {
+        setCustomerScores(customerScoresRes.value.data.data || []);
+      } else {
+        setCustomerScores([]);
+        errors.push("scores clients");
+      }
+
+      if (errors.length > 0) {
+        setError(
+          `Certaines donnees de la tour de controle IA n ont pas pu etre chargees : ${errors.join(", ")}.`
+        );
+      }
     } catch (err) {
       setError(
         err?.response?.data?.message ||

@@ -245,15 +245,37 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
 
   async function fetchOverview() {
-    const [overviewResponse, productsResponse, warehousesResponse] = await Promise.all([
-      api.get("/dashboard/overview"),
-      api.get("/products"),
-      api.get("/warehouses")
-    ]);
+    const [overviewResult, productsResult, warehousesResult] =
+      await Promise.allSettled([
+        api.get("/dashboard/overview"),
+        api.get("/products"),
+        api.get("/warehouses")
+      ]);
 
-    setOverviewData(overviewResponse.data.data);
-    setProducts(productsResponse.data.data || []);
-    setWarehouses(warehousesResponse.data.data || []);
+    const errors = [];
+
+    if (overviewResult.status === "fulfilled") {
+      setOverviewData(overviewResult.value.data.data || null);
+    } else {
+      setOverviewData(null);
+      errors.push("vue d ensemble");
+    }
+
+    if (productsResult.status === "fulfilled") {
+      setProducts(productsResult.value.data.data || []);
+    } else {
+      setProducts([]);
+      errors.push("produits");
+    }
+
+    if (warehousesResult.status === "fulfilled") {
+      setWarehouses(warehousesResult.value.data.data || []);
+    } else {
+      setWarehouses([]);
+      errors.push("depots");
+    }
+
+    return errors;
   }
 
   async function fetchStockVariationReport(currentFilters) {
@@ -280,7 +302,31 @@ export default function DashboardPage() {
       setLoading(true);
       setError("");
 
-      await Promise.all([fetchOverview(), fetchStockVariationReport(initialFilters)]);
+      const [overviewErrors, variationResult] = await Promise.all([
+        fetchOverview(),
+        fetchStockVariationReport(initialFilters)
+          .then(() => ({ ok: true }))
+          .catch((err) => ({ ok: false, err }))
+      ]);
+
+      const errors = Array.isArray(overviewErrors) ? [...overviewErrors] : [];
+
+      if (!variationResult.ok) {
+        setVariationData(null);
+        errors.push("rapport de variations de stock");
+      }
+
+      if (errors.length > 0) {
+        const backendMessage = variationResult.ok
+          ? ""
+          : variationResult.err?.response?.data?.message ||
+            variationResult.err?.message ||
+            "";
+
+        setError(
+          `Certaines sections du dashboard n ont pas pu etre chargees : ${errors.join(", ")}.${backendMessage ? ` ${backendMessage}` : ""}`
+        );
+      }
     } catch (err) {
       setError(
         err?.response?.data?.message ||

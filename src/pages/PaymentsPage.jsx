@@ -98,12 +98,31 @@ export default function PaymentsPage() {
       setLoading(true);
       setError("");
 
-      const [invoicesData, pendingPaymentsData] = await Promise.all([
+      const [invoicesResult, pendingPaymentsResult] = await Promise.allSettled([
         fetchInvoices(),
         fetchUnallocatedPayments()
       ]);
-      setInvoices(invoicesData);
-      setUnallocatedPayments(pendingPaymentsData);
+      const errors = [];
+
+      if (invoicesResult.status === "fulfilled") {
+        setInvoices(invoicesResult.value || []);
+      } else {
+        setInvoices([]);
+        errors.push("factures");
+      }
+
+      if (pendingPaymentsResult.status === "fulfilled") {
+        setUnallocatedPayments(pendingPaymentsResult.value || []);
+      } else {
+        setUnallocatedPayments([]);
+        errors.push("paiements en attente");
+      }
+
+      if (errors.length > 0) {
+        setError(
+          `Certaines donnees de paiement n ont pas pu etre chargees : ${errors.join(", ")}.`
+        );
+      }
     } catch (err) {
       setError(err?.message || "Impossible de charger les données de paiement.");
     } finally {
