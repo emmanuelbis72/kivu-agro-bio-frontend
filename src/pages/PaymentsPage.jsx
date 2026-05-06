@@ -13,6 +13,17 @@ const initialForm = {
   notes: ""
 };
 
+function canInvoiceReceivePayment(invoice) {
+  if (!invoice) {
+    return false;
+  }
+
+  return (
+    String(invoice.status || "").trim().toLowerCase() !== "paid" &&
+    Number(invoice.balance_due || 0) > 0
+  );
+}
+
 function formatMoney(value) {
   return new Intl.NumberFormat("fr-FR", {
     style: "currency",
@@ -196,12 +207,16 @@ export default function PaymentsPage() {
   }
 
   function resetFormKeepInvoice() {
+    const invoiceForForm = canInvoiceReceivePayment(selectedInvoice)
+      ? selectedInvoice
+      : null;
+
     setForm((prev) => ({
-      invoice_id: prev.invoice_id,
+      invoice_id: invoiceForForm ? prev.invoice_id : "",
       payment_date: new Date().toISOString().split("T")[0],
       amount:
-        selectedInvoice && Number(selectedInvoice.balance_due) > 0
-          ? String(Number(selectedInvoice.balance_due))
+        invoiceForForm
+          ? String(Number(invoiceForForm.balance_due))
           : "",
       payment_method: "cash",
       reference: "",
@@ -218,10 +233,14 @@ export default function PaymentsPage() {
       fetchUnallocatedPayments()
     ]);
 
-    setSelectedInvoice(invoiceRes.data.data || null);
+    const updatedInvoice = invoiceRes.data.data || null;
+
+    setSelectedInvoice(updatedInvoice);
     setPayments(paymentsRes.data.data || []);
     setInvoices(invoicesData || []);
     setUnallocatedPayments(pendingPaymentsData || []);
+
+    return updatedInvoice;
   }
 
   async function refreshUnallocatedPayments() {
@@ -269,6 +288,11 @@ export default function PaymentsPage() {
 
       if (!selectedInvoice) {
         setError("Aucune facture sélectionnée.");
+        return;
+      }
+
+      if (!canInvoiceReceivePayment(selectedInvoice)) {
+        setError("Cette facture ne présente plus de solde à payer.");
         return;
       }
 
@@ -334,8 +358,17 @@ export default function PaymentsPage() {
         setSuccessMessage("Paiement enregistré avec succès.");
       }
 
-      await refreshSelectedInvoice(form.invoice_id);
-      resetFormKeepInvoice();
+      const refreshedInvoice = await refreshSelectedInvoice(form.invoice_id);
+
+      if (!canInvoiceReceivePayment(refreshedInvoice)) {
+        setForm({
+          ...initialForm,
+          payment_date: new Date().toISOString().split("T")[0]
+        });
+        setSelectedUnallocatedPayment(null);
+      } else {
+        resetFormKeepInvoice();
+      }
     } catch (err) {
       setError(err?.message || "Erreur lors de l’enregistrement du paiement.");
     } finally {
@@ -375,6 +408,11 @@ export default function PaymentsPage() {
         .some((value) => String(value).toLowerCase().includes(keyword))
     );
   }, [invoices, search]);
+
+  const payableInvoices = useMemo(
+    () => filteredInvoices.filter((invoice) => canInvoiceReceivePayment(invoice)),
+    [filteredInvoices]
+  );
 
   return (
     <div className="space-y-8">
@@ -416,7 +454,7 @@ export default function PaymentsPage() {
                 className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
               >
                 <option value="">Sélectionner une facture</option>
-                {filteredInvoices.map((invoice) => (
+                {payableInvoices.map((invoice) => (
                   <option key={invoice.id} value={invoice.id}>
                     {invoice.invoice_number} — {invoice.customer_name} —{" "}
                     {formatMoney(invoice.balance_due)}
@@ -777,9 +815,14 @@ export default function PaymentsPage() {
                     render: (row) => (
                       <button
                         onClick={() => handleSelectInvoice(String(row.id))}
-                        className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"
+                        disabled={!canInvoiceReceivePayment(row)}
+                        className={`rounded-xl px-3 py-2 text-xs font-semibold ${
+                          canInvoiceReceivePayment(row)
+                            ? "border border-slate-300 text-slate-700"
+                            : "border border-slate-200 bg-slate-100 text-slate-400"
+                        }`}
                       >
-                        Sélectionner
+                        {canInvoiceReceivePayment(row) ? "Sélectionner" : "Soldée"}
                       </button>
                     )
                   }
