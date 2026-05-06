@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import api from "../api/axios";
 import SectionTitle from "../components/ui/SectionTitle";
@@ -102,6 +102,7 @@ const tabItems = [
 ];
 
 export default function CustomerAccountsPage() {
+  const tableSectionRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedCustomerId = searchParams.get("customerId") || "";
   const [customers, setCustomers] = useState([]);
@@ -111,6 +112,8 @@ export default function CustomerAccountsPage() {
   const [loadingStatement, setLoadingStatement] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("movements");
+  const [invoiceFilter, setInvoiceFilter] = useState("all");
+  const [selectedDetail, setSelectedDetail] = useState(null);
 
   useEffect(() => {
     async function fetchCustomers() {
@@ -168,6 +171,10 @@ export default function CustomerAccountsPage() {
       return;
     }
 
+    setSelectedDetail(null);
+    setInvoiceFilter("all");
+    setActiveTab("movements");
+
     async function fetchStatement() {
       try {
         setLoadingStatement(true);
@@ -185,6 +192,35 @@ export default function CustomerAccountsPage() {
 
     fetchStatement();
   }, [selectedCustomerId]);
+
+  function focusDetailsTable() {
+    window.requestAnimationFrame(() => {
+      tableSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    });
+  }
+
+  function openInvoiceList(filter = "all") {
+    setActiveTab("invoices");
+    setInvoiceFilter(filter);
+    setSelectedDetail(null);
+    focusDetailsTable();
+  }
+
+  function openPaymentsList() {
+    setActiveTab("payments");
+    setSelectedDetail(null);
+    focusDetailsTable();
+  }
+
+  function handleSelectDetail(type, row) {
+    setSelectedDetail({
+      type,
+      row
+    });
+  }
 
   const summary = statement?.summary || {};
   const customer = statement?.customer || null;
@@ -238,6 +274,19 @@ export default function CustomerAccountsPage() {
         key: "accounting_status",
         label: "Compta",
         render: (row) => renderAccountingStatus(row.accounting_status)
+      },
+      {
+        key: "actions",
+        label: "Details",
+        render: (row) => (
+          <button
+            type="button"
+            onClick={() => handleSelectDetail("movement", row)}
+            className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"
+          >
+            Voir details
+          </button>
+        )
       }
     ],
     []
@@ -275,6 +324,19 @@ export default function CustomerAccountsPage() {
         key: "balance_due",
         label: "Solde du",
         render: (row) => <span className="font-semibold text-slate-900">{formatMoney(row.balance_due)}</span>
+      },
+      {
+        key: "actions",
+        label: "Details",
+        render: (row) => (
+          <button
+            type="button"
+            onClick={() => handleSelectDetail("invoice", row)}
+            className="rounded-xl border border-brand-300 px-3 py-2 text-xs font-semibold text-brand-700"
+          >
+            Voir details
+          </button>
+        )
       }
     ],
     []
@@ -307,10 +369,53 @@ export default function CustomerAccountsPage() {
         key: "accounting_status",
         label: "Compta",
         render: (row) => renderAccountingStatus(row.accounting_status)
+      },
+      {
+        key: "actions",
+        label: "Details",
+        render: (row) => (
+          <button
+            type="button"
+            onClick={() => handleSelectDetail("payment", row)}
+            className="rounded-xl border border-brand-300 px-3 py-2 text-xs font-semibold text-brand-700"
+          >
+            Voir details
+          </button>
+        )
       }
     ],
     []
   );
+
+  const filteredInvoices = useMemo(() => {
+    const invoices = statement?.invoices || [];
+
+    if (invoiceFilter === "open") {
+      return invoices.filter((row) => ["issued", "partial"].includes(String(row.status || "").toLowerCase()));
+    }
+
+    if (invoiceFilter === "overdue") {
+      return invoices.filter((row) => {
+        if (!row.due_date || Number(row.balance_due || 0) <= 0) {
+          return false;
+        }
+
+        const dueDate = new Date(row.due_date);
+
+        if (Number.isNaN(dueDate.getTime())) {
+          return false;
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        dueDate.setHours(0, 0, 0, 0);
+
+        return dueDate < today;
+      });
+    }
+
+    return invoices;
+  }, [invoiceFilter, statement]);
 
   const activeRows = useMemo(() => {
     if (!statement) {
@@ -318,7 +423,7 @@ export default function CustomerAccountsPage() {
     }
 
     if (activeTab === "invoices") {
-      return statement.invoices || [];
+      return filteredInvoices;
     }
 
     if (activeTab === "payments") {
@@ -326,15 +431,28 @@ export default function CustomerAccountsPage() {
     }
 
     return statement.movements || [];
-  }, [activeTab, statement]);
+  }, [activeTab, filteredInvoices, statement]);
 
   const activeColumns = activeTab === "invoices" ? invoiceColumns : activeTab === "payments" ? paymentColumns : movementColumns;
   const activeTitle =
     activeTab === "invoices"
-      ? `Factures (${statement?.invoices?.length || 0})`
+      ? invoiceFilter === "open"
+        ? `Factures ouvertes (${filteredInvoices.length})`
+        : invoiceFilter === "overdue"
+        ? `Factures echees (${filteredInvoices.length})`
+        : `Factures (${filteredInvoices.length})`
       : activeTab === "payments"
       ? `Paiements (${statement?.payments?.length || 0})`
       : `Mouvements (${statement?.movements?.length || 0})`;
+
+  const detailTitle =
+    selectedDetail?.type === "invoice"
+      ? `Detail facture ${selectedDetail?.row?.invoice_number || ""}`
+      : selectedDetail?.type === "payment"
+      ? `Detail paiement ${selectedDetail?.row?.reference || selectedDetail?.row?.id || ""}`
+      : selectedDetail?.type === "movement"
+      ? `Detail mouvement ${selectedDetail?.row?.reference || ""}`
+      : "";
 
   return (
     <div className="space-y-8">
@@ -418,26 +536,58 @@ export default function CustomerAccountsPage() {
         <StatCard
           title="Total facture"
           value={formatMoney(summary.total_invoiced)}
-          subtitle={`${Number(summary.total_invoices || 0)} facture(s)`}
+          subtitle={
+            <button
+              type="button"
+              onClick={() => openInvoiceList("all")}
+              className="text-sm font-semibold text-brand-700 underline-offset-4 hover:underline"
+            >
+              {Number(summary.total_invoices || 0)} facture(s)
+            </button>
+          }
         />
         <StatCard
           title="Total paye"
           value={formatMoney(summary.total_paid)}
-          subtitle={`${Number(summary.total_payments || 0)} paiement(s)`}
+          subtitle={
+            <button
+              type="button"
+              onClick={openPaymentsList}
+              className="text-sm font-semibold text-brand-700 underline-offset-4 hover:underline"
+            >
+              {Number(summary.total_payments || 0)} paiement(s)
+            </button>
+          }
         />
         <StatCard
           title="Solde du"
           value={formatMoney(summary.balance_due)}
-          subtitle={`${Number(summary.partial_invoices || 0) + Number(summary.issued_invoices || 0)} facture(s) ouvertes`}
+          subtitle={
+            <button
+              type="button"
+              onClick={() => openInvoiceList("open")}
+              className="text-sm font-semibold text-brand-700 underline-offset-4 hover:underline"
+            >
+              {Number(summary.partial_invoices || 0) + Number(summary.issued_invoices || 0)} facture(s) ouvertes
+            </button>
+          }
         />
         <StatCard
           title="Echeances en retard"
           value={formatMoney(summary.overdue_balance)}
-          subtitle={`${Number(summary.overdue_invoices || 0)} facture(s) echee(s)`}
+          subtitle={
+            <button
+              type="button"
+              onClick={() => openInvoiceList("overdue")}
+              className="text-sm font-semibold text-brand-700 underline-offset-4 hover:underline"
+            >
+              {Number(summary.overdue_invoices || 0)} facture(s) echee(s)
+            </button>
+          }
         />
       </div>
 
-      <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+      <div ref={tableSectionRef} className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
         <div className="flex flex-wrap gap-3">
           {tabItems.map((tab) => (
             <button
@@ -455,6 +605,44 @@ export default function CustomerAccountsPage() {
           ))}
         </div>
 
+        {activeTab === "invoices" ? (
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => setInvoiceFilter("all")}
+              className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+                invoiceFilter === "all"
+                  ? "bg-slate-900 text-white"
+                  : "border border-slate-300 text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              Toutes les factures
+            </button>
+            <button
+              type="button"
+              onClick={() => setInvoiceFilter("open")}
+              className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+                invoiceFilter === "open"
+                  ? "bg-slate-900 text-white"
+                  : "border border-slate-300 text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              Factures ouvertes
+            </button>
+            <button
+              type="button"
+              onClick={() => setInvoiceFilter("overdue")}
+              className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+                invoiceFilter === "overdue"
+                  ? "bg-slate-900 text-white"
+                  : "border border-slate-300 text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              Factures echees
+            </button>
+          </div>
+        ) : null}
+
         <div className="mt-6">
           {loadingStatement ? (
             <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
@@ -470,6 +658,132 @@ export default function CustomerAccountsPage() {
           )}
         </div>
       </div>
+
+      {selectedDetail ? (
+        <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-lg font-semibold text-slate-900">{detailTitle}</div>
+            <button
+              type="button"
+              onClick={() => setSelectedDetail(null)}
+              className="rounded-2xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
+            >
+              Fermer
+            </button>
+          </div>
+
+          {selectedDetail.type === "invoice" ? (
+            <div className="mt-5 grid grid-cols-1 gap-4 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Facture</div>
+                <div className="mt-1 font-semibold text-slate-900">{selectedDetail.row.invoice_number}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Date</div>
+                <div className="mt-1">{formatDate(selectedDetail.row.invoice_date)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Echeance</div>
+                <div className="mt-1">{formatDate(selectedDetail.row.due_date)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Statut</div>
+                <div className="mt-1">{renderInvoiceStatus(selectedDetail.row.status)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Total facture</div>
+                <div className="mt-1 font-semibold text-slate-900">{formatMoney(selectedDetail.row.total_amount)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Montant paye</div>
+                <div className="mt-1">{formatMoney(selectedDetail.row.paid_amount)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Solde du</div>
+                <div className="mt-1">{formatMoney(selectedDetail.row.balance_due)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Comptabilisation</div>
+                <div className="mt-1">{renderAccountingStatus(selectedDetail.row.accounting_status)}</div>
+              </div>
+              <div className="md:col-span-2 xl:col-span-4">
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Notes</div>
+                <div className="mt-1 rounded-2xl bg-slate-50 px-4 py-3">{selectedDetail.row.notes || "-"}</div>
+              </div>
+            </div>
+          ) : null}
+
+          {selectedDetail.type === "payment" ? (
+            <div className="mt-5 grid grid-cols-1 gap-4 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Paiement</div>
+                <div className="mt-1 font-semibold text-slate-900">{selectedDetail.row.reference || `PAY-${selectedDetail.row.id}`}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Facture</div>
+                <div className="mt-1">{selectedDetail.row.invoice_number}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Date</div>
+                <div className="mt-1">{formatDate(selectedDetail.row.payment_date)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Mode</div>
+                <div className="mt-1">{selectedDetail.row.payment_method || "-"}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Montant</div>
+                <div className="mt-1 font-semibold text-slate-900">{formatMoney(selectedDetail.row.amount)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Comptabilisation</div>
+                <div className="mt-1">{renderAccountingStatus(selectedDetail.row.accounting_status)}</div>
+              </div>
+              <div className="md:col-span-2 xl:col-span-4">
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Notes</div>
+                <div className="mt-1 rounded-2xl bg-slate-50 px-4 py-3">{selectedDetail.row.notes || "-"}</div>
+              </div>
+            </div>
+          ) : null}
+
+          {selectedDetail.type === "movement" ? (
+            <div className="mt-5 grid grid-cols-1 gap-4 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Piece</div>
+                <div className="mt-1 font-semibold text-slate-900">{selectedDetail.row.reference}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Type</div>
+                <div className="mt-1">{selectedDetail.row.movement_label}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Date</div>
+                <div className="mt-1">{formatDate(selectedDetail.row.movement_date)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Solde courant</div>
+                <div className="mt-1">{formatMoney(selectedDetail.row.running_balance)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Debit</div>
+                <div className="mt-1">{formatMoney(selectedDetail.row.debit)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Credit</div>
+                <div className="mt-1">{formatMoney(selectedDetail.row.credit)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Comptabilisation</div>
+                <div className="mt-1">{renderAccountingStatus(selectedDetail.row.accounting_status)}</div>
+              </div>
+              <div className="md:col-span-2 xl:col-span-4">
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Notes</div>
+                <div className="mt-1 rounded-2xl bg-slate-50 px-4 py-3">{selectedDetail.row.notes || "-"}</div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
