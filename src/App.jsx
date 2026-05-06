@@ -13,6 +13,7 @@ import WarehousesPage from "./pages/WarehousesPage";
 import StockPage from "./pages/StockPage";
 import ProductionPage from "./pages/ProductionPage";
 import CustomersPage from "./pages/CustomersPage";
+import CustomerAccountsPage from "./pages/CustomerAccountsPage";
 import InvoicesPage from "./pages/InvoicesPage";
 import PaymentsPage from "./pages/PaymentsPage";
 import ExpensesPage from "./pages/ExpensesPage";
@@ -46,6 +47,7 @@ export default function App() {
           <Route path="production" element={<ProductionPage />} />
 
           <Route path="customers" element={<CustomersPage />} />
+          <Route path="customer-accounts" element={<CustomerAccountsPage />} />
           <Route path="invoices" element={<InvoicesPage />} />
           <Route path="payments" element={<PaymentsPage />} />
           <Route path="expenses" element={<ExpensesPage />} />

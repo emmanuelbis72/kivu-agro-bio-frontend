@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import SectionTitle from "../components/ui/SectionTitle";
 import TableCard from "../components/ui/TableCard";
@@ -42,6 +43,7 @@ function formatMoney(value) {
 }
 
 export default function CustomersPage() {
+  const navigate = useNavigate();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitLoading, setSubmitLoading] = useState(false);
@@ -106,6 +108,10 @@ export default function CustomersPage() {
     });
 
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function handleOpenAccount(customer) {
+    navigate(`/customer-accounts?customerId=${customer.id}`);
   }
 
   async function handleSubmit(event) {
@@ -458,6 +464,12 @@ export default function CustomersPage() {
                   label: "Actions",
                   render: (row) => (
                     <div className="flex gap-2">
+                      <button
+                        onClick={() => handleOpenAccount(row)}
+                        className="rounded-xl border border-brand-300 px-3 py-2 text-xs font-semibold text-brand-700"
+                      >
+                        Compte courant
+                      </button>
                       <button
                         onClick={() => handleEdit(row)}
                         className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"

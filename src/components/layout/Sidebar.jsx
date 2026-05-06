@@ -43,6 +43,11 @@ const mainLinks = [
     icon: Factory
   },
   { to: "/customers", label: "Clients", icon: Users },
+  {
+    to: "/customer-accounts",
+    label: "Comptes courants",
+    icon: ScrollText
+  },
   { to: "/invoices", label: "Factures", icon: FileText },
   { to: "/payments", label: "Paiements", icon: Wallet },
   { to: "/expenses", label: "Dépenses", icon: Receipt }
