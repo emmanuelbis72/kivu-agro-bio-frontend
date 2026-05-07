@@ -7,6 +7,8 @@ import {
   Boxes,
   Factory,
   Users,
+  Truck,
+  ShoppingCart,
   FileText,
   Wallet,
   Receipt,
@@ -30,6 +32,7 @@ import {
 
 const mainLinks = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/commercial-dashboard", label: "Dashboard commercial", icon: TrendingUp },
   { to: "/products", label: "Produits", icon: Package },
   { to: "/warehouses", label: "Dépôts", icon: Warehouse },
   {
@@ -43,12 +46,20 @@ const mainLinks = [
     icon: Factory
   },
   { to: "/customers", label: "Clients", icon: Users },
+  { to: "/suppliers", label: "Fournisseurs", icon: Truck },
   {
     to: "/customer-accounts",
-    label: "Comptes courants",
+    label: "Comptes clients",
+    icon: ScrollText
+  },
+  {
+    to: "/supplier-accounts",
+    label: "Comptes fournisseurs",
     icon: ScrollText
   },
   { to: "/invoices", label: "Factures", icon: FileText },
+  { to: "/purchase-orders", label: "Commandes achats", icon: ShoppingCart },
+  { to: "/purchase-invoices", label: "Factures achats", icon: ShoppingCart },
   { to: "/payments", label: "Paiements", icon: Wallet },
   { to: "/expenses", label: "Dépenses", icon: Receipt }
 ];

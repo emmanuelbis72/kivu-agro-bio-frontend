@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import MainLayout from "./components/layout/MainLayout";
 
 import DashboardPage from "./pages/DashboardPage";
+import CommercialDashboardPage from "./pages/CommercialDashboardPage";
 import AccountingDashboardPage from "./pages/AccountingDashboardPage";
 import AIReasoningPage from "./pages/AIReasoningPage";
 import AIControlTowerPage from "./pages/AIControlTowerPage";
@@ -13,8 +14,12 @@ import WarehousesPage from "./pages/WarehousesPage";
 import StockPage from "./pages/StockPage";
 import ProductionPage from "./pages/ProductionPage";
 import CustomersPage from "./pages/CustomersPage";
+import SuppliersPage from "./pages/SuppliersPage";
 import CustomerAccountsPage from "./pages/CustomerAccountsPage";
+import SupplierAccountsPage from "./pages/SupplierAccountsPage";
 import InvoicesPage from "./pages/InvoicesPage";
+import PurchaseOrdersPage from "./pages/PurchaseOrdersPage";
+import PurchaseInvoicesPage from "./pages/PurchaseInvoicesPage";
 import PaymentsPage from "./pages/PaymentsPage";
 import ExpensesPage from "./pages/ExpensesPage";
 import AccountsPage from "./pages/AccountsPage";
@@ -36,6 +41,7 @@ export default function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
 
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="commercial-dashboard" element={<CommercialDashboardPage />} />
           <Route
             path="accounting-dashboard"
             element={<AccountingDashboardPage />}
@@ -47,8 +53,12 @@ export default function App() {
           <Route path="production" element={<ProductionPage />} />
 
           <Route path="customers" element={<CustomersPage />} />
+          <Route path="suppliers" element={<SuppliersPage />} />
           <Route path="customer-accounts" element={<CustomerAccountsPage />} />
+          <Route path="supplier-accounts" element={<SupplierAccountsPage />} />
           <Route path="invoices" element={<InvoicesPage />} />
+          <Route path="purchase-orders" element={<PurchaseOrdersPage />} />
+          <Route path="purchase-invoices" element={<PurchaseInvoicesPage />} />
           <Route path="payments" element={<PaymentsPage />} />
           <Route path="expenses" element={<ExpensesPage />} />
 
