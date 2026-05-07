@@ -27,12 +27,16 @@ import {
   Target,
   ShieldAlert,
   DatabaseZap,
-  Radar
+  Radar,
+  FileSpreadsheet
 } from "lucide-react";
 
 const mainLinks = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/commercial-dashboard", label: "Dashboard commercial", icon: TrendingUp },
+  { to: "/reports", label: "Etats & exports", icon: FileSpreadsheet },
+  { to: "/budget-vs-actual", label: "Budget vs realise", icon: BarChart3 },
+  { to: "/monthly-close-pack", label: "Cloture mensuelle", icon: FileText },
   { to: "/products", label: "Produits", icon: Package },
   { to: "/warehouses", label: "Dépôts", icon: Warehouse },
   {

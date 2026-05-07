@@ -89,6 +89,18 @@ function getProjectedBalanceClass(value) {
   return "text-green-700";
 }
 
+function getHealthBadgeClass(status) {
+  if (status === "healthy") {
+    return "bg-emerald-100 text-emerald-700";
+  }
+
+  if (status === "attention") {
+    return "bg-amber-100 text-amber-700";
+  }
+
+  return "bg-red-100 text-red-700";
+}
+
 function ForecastCard({ horizon }) {
   return (
     <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
@@ -179,6 +191,7 @@ export default function AccountingDashboardPage() {
   const recentEntries = data?.recent_journal_entries || [];
   const receivablesDueSoon = cashForecast.receivables_due_soon || [];
   const payablesDueSoon = cashForecast.payables_due_soon || [];
+  const accountingHealth = data?.accounting_health || {};
 
   return (
     <div className="space-y-8">
@@ -256,6 +269,105 @@ export default function AccountingDashboardPage() {
               : "Aucune projection"
           }
         />
+      </div>
+
+      <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="text-lg font-semibold text-slate-900">
+              Sante comptable
+            </div>
+            <div className="mt-1 text-sm text-slate-500">
+              Controle des ecritures, des liaisons comptables et du parametrage automatique.
+            </div>
+          </div>
+
+          <span
+            className={`inline-flex rounded-full px-4 py-2 text-sm font-semibold ${getHealthBadgeClass(
+              accountingHealth.status
+            )}`}
+          >
+            {accountingHealth.status === "healthy"
+              ? "Comptabilite saine"
+              : accountingHealth.status === "attention"
+              ? "Comptabilite a surveiller"
+              : "Comptabilite critique"}
+          </span>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            title="Ecritures brouillon"
+            value={Number(accountingHealth.totals?.draft_entries || 0)}
+          />
+          <StatCard
+            title="Ecritures desequilibrees"
+            value={Number(accountingHealth.totals?.imbalanced_entries || 0)}
+          />
+          <StatCard
+            title="Liens orphelins"
+            value={Number(accountingHealth.totals?.orphan_links || 0)}
+          />
+          <StatCard
+            title="Mappings paiement"
+            value={`${Number(
+              accountingHealth.coverage?.payment_method_mappings_count || 0
+            )}/4`}
+            subtitle={
+              accountingHealth.coverage?.missing_payment_methods?.length
+                ? `manquants: ${accountingHealth.coverage.missing_payment_methods.join(", ")}`
+                : "couverture complete"
+            }
+          />
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <div className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-700">
+            <div className="font-semibold text-slate-900">Anomalies detectees</div>
+            {accountingHealth.issues?.length > 0 ? (
+              <ul className="mt-3 space-y-2">
+                {accountingHealth.issues.map((issue) => (
+                  <li key={issue} className="leading-6">
+                    {issue}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="mt-3 leading-6 text-slate-600">
+                Aucune anomalie structurelle detectee sur les ecritures, les paiements et les liaisons comptables.
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-700">
+            <div className="font-semibold text-slate-900">Parametrage automatique</div>
+            <div className="mt-3 space-y-2 leading-6">
+              <div>
+                Categories de depense configurees:{" "}
+                <span className="font-semibold text-slate-900">
+                  {Number(accountingHealth.coverage?.configured_expense_categories || 0)}
+                </span>
+              </div>
+              <div>
+                Categories de depense sans mapping detectees:{" "}
+                <span className="font-semibold text-slate-900">
+                  {Number(
+                    accountingHealth.coverage?.unmapped_expense_categories?.length || 0
+                  )}
+                </span>
+              </div>
+              {accountingHealth.coverage?.unmapped_expense_categories?.length ? (
+                <div className="text-amber-700">
+                  {accountingHealth.coverage.unmapped_expense_categories.join(", ")}
+                </div>
+              ) : (
+                <div className="text-slate-600">
+                  Aucun manque de mapping detecte sur les categories de depense deja utilisees.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">

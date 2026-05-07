@@ -4,6 +4,7 @@ import api from "../api/axios";
 import SectionTitle from "../components/ui/SectionTitle";
 import StatCard from "../components/ui/StatCard";
 import TableCard from "../components/ui/TableCard";
+import { saveBlobResponse } from "../utils/fileDownload";
 
 function formatMoney(value) {
   return new Intl.NumberFormat("fr-FR", {
@@ -110,6 +111,7 @@ export default function CustomerAccountsPage() {
   const [statement, setStatement] = useState(null);
   const [loadingCustomers, setLoadingCustomers] = useState(true);
   const [loadingStatement, setLoadingStatement] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("movements");
   const [invoiceFilter, setInvoiceFilter] = useState("all");
@@ -220,6 +222,32 @@ export default function CustomerAccountsPage() {
       type,
       row
     });
+  }
+
+  async function handleExportStatementPdf() {
+    if (!selectedCustomerId) {
+      return;
+    }
+
+    try {
+      setExportingPdf(true);
+      const response = await api.get(
+        `/customers/${selectedCustomerId}/account-statement.pdf`,
+        {
+          responseType: "blob"
+        }
+      );
+
+      saveBlobResponse(response, `etat-compte-client-${selectedCustomerId}.pdf`);
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible d'exporter l'etat de compte client."
+      );
+    } finally {
+      setExportingPdf(false);
+    }
   }
 
   const summary = statement?.summary || {};
@@ -468,6 +496,20 @@ export default function CustomerAccountsPage() {
       ) : null}
 
       <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+          <div className="text-lg font-semibold text-slate-900">
+            Selection et export
+          </div>
+          <button
+            type="button"
+            onClick={handleExportStatementPdf}
+            disabled={!selectedCustomerId || exportingPdf || loadingStatement}
+            className="rounded-2xl border border-brand-300 px-4 py-3 text-sm font-semibold text-brand-700 disabled:opacity-60"
+          >
+            {exportingPdf ? "Export PDF..." : "Etat de compte PDF"}
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(280px,360px)_1fr]">
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">

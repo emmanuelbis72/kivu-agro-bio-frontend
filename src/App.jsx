@@ -5,6 +5,9 @@ import MainLayout from "./components/layout/MainLayout";
 import DashboardPage from "./pages/DashboardPage";
 import CommercialDashboardPage from "./pages/CommercialDashboardPage";
 import AccountingDashboardPage from "./pages/AccountingDashboardPage";
+import ReportsPage from "./pages/ReportsPage";
+import BudgetVsActualPage from "./pages/BudgetVsActualPage";
+import MonthlyClosePackPage from "./pages/MonthlyClosePackPage";
 import AIReasoningPage from "./pages/AIReasoningPage";
 import AIControlTowerPage from "./pages/AIControlTowerPage";
 import AIScoringDashboardPage from "./pages/AIScoringDashboardPage";
@@ -46,6 +49,9 @@ export default function App() {
             path="accounting-dashboard"
             element={<AccountingDashboardPage />}
           />
+          <Route path="reports" element={<ReportsPage />} />
+          <Route path="budget-vs-actual" element={<BudgetVsActualPage />} />
+          <Route path="monthly-close-pack" element={<MonthlyClosePackPage />} />
 
           <Route path="products" element={<ProductsPage />} />
           <Route path="warehouses" element={<WarehousesPage />} />
