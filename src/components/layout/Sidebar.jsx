@@ -31,41 +31,34 @@ import {
   FileSpreadsheet
 } from "lucide-react";
 
-const mainLinks = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/commercial-dashboard", label: "Dashboard commercial", icon: TrendingUp },
-  { to: "/reports", label: "Etats & exports", icon: FileSpreadsheet },
-  { to: "/budget-vs-actual", label: "Budget vs realise", icon: BarChart3 },
-  { to: "/monthly-close-pack", label: "Cloture mensuelle", icon: FileText },
-  { to: "/products", label: "Produits", icon: Package },
-  { to: "/warehouses", label: "Dépôts", icon: Warehouse },
+const primarySections = [
   {
-    to: "/stock",
-    label: "Stock / Transformations",
-    icon: Boxes
+    title: "Pilotage",
+    links: [
+      { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      {
+        to: "/commercial-dashboard",
+        label: "Dashboard commercial",
+        icon: TrendingUp
+      },
+      { to: "/reports", label: "Etats & exports", icon: FileSpreadsheet },
+      { to: "/budget-vs-actual", label: "Budget vs realise", icon: BarChart3 },
+      { to: "/monthly-close-pack", label: "Cloture mensuelle", icon: FileText }
+    ]
   },
   {
-    to: "/production",
-    label: "Production / Recettes",
-    icon: Factory
-  },
-  { to: "/customers", label: "Clients", icon: Users },
-  { to: "/suppliers", label: "Fournisseurs", icon: Truck },
-  {
-    to: "/customer-accounts",
-    label: "Comptes clients",
-    icon: ScrollText
-  },
-  {
-    to: "/supplier-accounts",
-    label: "Comptes fournisseurs",
-    icon: ScrollText
-  },
-  { to: "/invoices", label: "Factures", icon: FileText },
-  { to: "/purchase-orders", label: "Commandes achats", icon: ShoppingCart },
-  { to: "/purchase-invoices", label: "Factures achats", icon: ShoppingCart },
-  { to: "/payments", label: "Paiements", icon: Wallet },
-  { to: "/expenses", label: "Dépenses", icon: Receipt }
+    title: "Relation client",
+    links: [
+      {
+        to: "/customer-accounts",
+        label: "Comptes clients",
+        icon: ScrollText
+      },
+      { to: "/invoices", label: "Factures", icon: FileText },
+      { to: "/payments", label: "Paiements", icon: Wallet },
+      { to: "/customers", label: "Clients", icon: Users }
+    ]
+  }
 ];
 
 const accountingLinks = [
@@ -76,24 +69,24 @@ const accountingLinks = [
   },
   { to: "/accounts", label: "Plan comptable OHADA", icon: BookOpenText },
   { to: "/journal-entries", label: "Journal comptable", icon: ScrollText },
-  { to: "/trial-balance", label: "Balance générale", icon: Scale },
+  { to: "/trial-balance", label: "Balance generale", icon: Scale },
   { to: "/general-ledger", label: "Grand livre", icon: LibraryBig },
-  { to: "/income-statement", label: "Compte de résultat", icon: TrendingUp },
+  { to: "/income-statement", label: "Compte de resultat", icon: TrendingUp },
   { to: "/balance-sheet", label: "Bilan", icon: Landmark },
   {
     to: "/accounting-settings",
-    label: "Paramétrage comptable",
+    label: "Parametrage comptable",
     icon: Settings2
   }
 ];
 
 const aiLinks = [
-  { to: "/ai-control-tower", label: "Tour de contrôle IA", icon: Radar },
+  { to: "/ai-control-tower", label: "Tour de controle IA", icon: Radar },
   { to: "/ai-reasoning", label: "Assistant Direction IA", icon: Brain },
   { to: "/kabot", label: "KABOT Dashboard", icon: ShieldAlert },
   {
     to: "/company-knowledge",
-    label: "Mémoire entreprise",
+    label: "Memoire entreprise",
     icon: DatabaseZap
   },
   {
@@ -103,8 +96,50 @@ const aiLinks = [
   },
   {
     to: "/ai-business-rules",
-    label: "Règles métier IA",
+    label: "Regles metier IA",
     icon: SlidersHorizontal
+  }
+];
+
+const secondarySections = [
+  {
+    title: "Operations",
+    links: [
+      { to: "/products", label: "Produits", icon: Package },
+      { to: "/warehouses", label: "Depots", icon: Warehouse },
+      {
+        to: "/stock",
+        label: "Stock / Transformations",
+        icon: Boxes
+      },
+      {
+        to: "/production",
+        label: "Production / Recettes",
+        icon: Factory
+      }
+    ]
+  },
+  {
+    title: "Achats & fournisseurs",
+    links: [
+      { to: "/suppliers", label: "Fournisseurs", icon: Truck },
+      {
+        to: "/supplier-accounts",
+        label: "Comptes fournisseurs",
+        icon: ScrollText
+      },
+      {
+        to: "/purchase-orders",
+        label: "Commandes achats",
+        icon: ShoppingCart
+      },
+      {
+        to: "/purchase-invoices",
+        label: "Factures achats",
+        icon: ShoppingCart
+      },
+      { to: "/expenses", label: "Depenses", icon: Receipt }
+    ]
   }
 ];
 
@@ -125,6 +160,27 @@ function SidebarLink({ to, label, icon: Icon, nested = false }) {
       <Icon size={18} />
       <span>{label}</span>
     </NavLink>
+  );
+}
+
+function SidebarSectionTitle({ children }) {
+  return (
+    <div className="px-4 pb-2 pt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+      {children}
+    </div>
+  );
+}
+
+function SidebarSection({ title, links }) {
+  return (
+    <div>
+      <SidebarSectionTitle>{title}</SidebarSectionTitle>
+      <div className="space-y-2">
+        {links.map((item) => (
+          <SidebarLink key={item.to} {...item} />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -152,17 +208,18 @@ export default function Sidebar() {
           Gestion Pro
         </div>
         <div className="mt-1 text-sm text-slate-500">
-          Catalogue produits, stock intelligent, recettes, ventes, dépenses,
-          comptabilité et intelligence artificielle
+          Pilotage, relation client, operations, comptabilite et intelligence
+          artificielle
         </div>
       </div>
 
-      <nav className="space-y-2 p-4">
-        {mainLinks.map((item) => (
-          <SidebarLink key={item.to} {...item} />
+      <nav className="space-y-1 p-4">
+        {primarySections.map((section) => (
+          <SidebarSection key={section.title} {...section} />
         ))}
 
         <div className="pt-2">
+          <SidebarSectionTitle>Intelligence artificielle</SidebarSectionTitle>
           <button
             type="button"
             onClick={() => setAiOpen((prev) => !prev)}
@@ -190,6 +247,7 @@ export default function Sidebar() {
         </div>
 
         <div className="pt-2">
+          <SidebarSectionTitle>Comptabilite</SidebarSectionTitle>
           <button
             type="button"
             onClick={() => setAccountingOpen((prev) => !prev)}
@@ -201,7 +259,7 @@ export default function Sidebar() {
           >
             <span className="flex items-center gap-3">
               <BookOpenText size={18} />
-              <span>Comptabilité</span>
+              <span>Comptabilite</span>
             </span>
 
             {accountingOpen ? (
@@ -219,6 +277,10 @@ export default function Sidebar() {
             </div>
           ) : null}
         </div>
+
+        {secondarySections.map((section) => (
+          <SidebarSection key={section.title} {...section} />
+        ))}
       </nav>
     </aside>
   );
