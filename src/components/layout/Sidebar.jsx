@@ -116,6 +116,11 @@ const secondarySections = [
         to: "/production",
         label: "Production / Recettes",
         icon: Factory
+      },
+      {
+        to: "/packaging",
+        label: "Emballages",
+        icon: Package
       }
     ]
   },

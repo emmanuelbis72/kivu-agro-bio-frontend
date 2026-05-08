@@ -16,6 +16,7 @@ import ProductsPage from "./pages/ProductsPage";
 import WarehousesPage from "./pages/WarehousesPage";
 import StockPage from "./pages/StockPage";
 import ProductionPage from "./pages/ProductionPage";
+import PackagingPage from "./pages/PackagingPage";
 import CustomersPage from "./pages/CustomersPage";
 import SuppliersPage from "./pages/SuppliersPage";
 import CustomerAccountsPage from "./pages/CustomerAccountsPage";
@@ -57,6 +58,7 @@ export default function App() {
           <Route path="warehouses" element={<WarehousesPage />} />
           <Route path="stock" element={<StockPage />} />
           <Route path="production" element={<ProductionPage />} />
+          <Route path="packaging" element={<PackagingPage />} />
 
           <Route path="customers" element={<CustomersPage />} />
           <Route path="suppliers" element={<SuppliersPage />} />
