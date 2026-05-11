@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../api/axios";
 import SectionTitle from "../components/ui/SectionTitle";
 import StatCard from "../components/ui/StatCard";
@@ -41,23 +41,6 @@ function formatDate(value) {
   return new Intl.DateTimeFormat("fr-FR").format(date);
 }
 
-function formatMonthLabel(value) {
-  if (!value) {
-    return "-";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return String(value);
-  }
-
-  return new Intl.DateTimeFormat("fr-FR", {
-    month: "long",
-    year: "numeric"
-  }).format(date);
-}
-
 function formatBoolean(value) {
   return value ? "Oui" : "Non";
 }
@@ -74,11 +57,10 @@ function getInitialFilters() {
     warehouse_id: "",
     customer_id: "",
     product_id: "",
-    customer_city: "",
-    product_category: "",
-    sku: "",
+    warehouse_ids: [],
+    customer_ids: [],
+    product_ids: [],
     invoice_status: "",
-    report_variant: "summary",
     low_stock_only: false,
     detail_limit: 20
   };
@@ -351,19 +333,24 @@ const reportConfigs = {
     exportKey: "product-sales",
     label: "Analyse ventes par produit",
     description:
-      "Savoir combien d'un produit a ete vendu sur une periode, par depot, par client ou par mois, avec lecture marge et chiffre d'affaires.",
+      "Savoir combien d'un ou plusieurs produits ont ete vendus sur une periode, dans un ou plusieurs depots, et chez un ou plusieurs clients.",
     endpoint: "/reports/product-sales",
     buildParams: (filters, forExport = false) => ({
       start_date: filters.start_date,
       end_date: filters.end_date,
-      warehouse_id: filters.warehouse_id || undefined,
-      customer_id: filters.customer_id || undefined,
-      product_id: filters.product_id || undefined,
-      customer_city: filters.customer_city || undefined,
-      product_category: filters.product_category || undefined,
-      sku: filters.sku || undefined,
+      warehouse_ids:
+        Array.isArray(filters.warehouse_ids) && filters.warehouse_ids.length > 0
+          ? filters.warehouse_ids.join(",")
+          : undefined,
+      customer_ids:
+        Array.isArray(filters.customer_ids) && filters.customer_ids.length > 0
+          ? filters.customer_ids.join(",")
+          : undefined,
+      product_ids:
+        Array.isArray(filters.product_ids) && filters.product_ids.length > 0
+          ? filters.product_ids.join(",")
+          : undefined,
       invoice_status: filters.invoice_status || undefined,
-      variant: filters.report_variant || "summary",
       limit: forExport ? 5000 : 500
     }),
     exportFilename: (filters) =>
@@ -371,6 +358,8 @@ const reportConfigs = {
     summaryCards: (summary) => [
       { title: "Regroupements", value: Number(summary.total_rows || 0) },
       { title: "Produits", value: Number(summary.total_products || 0) },
+      { title: "Depots", value: Number(summary.total_warehouses || 0) },
+      { title: "Clients", value: Number(summary.total_customers || 0) },
       { title: "Factures", value: Number(summary.total_invoices || 0) },
       {
         title: "Quantite vendue",
@@ -390,11 +379,6 @@ const reportConfigs = {
       }
     ],
     columns: [
-      {
-        key: "analysis_label",
-        label: "Analyse",
-        csvValue: (row) => row.analysis_label || ""
-      },
       {
         key: "product_name",
         label: "Produit",
@@ -426,12 +410,6 @@ const reportConfigs = {
         csvValue: (row) => row.customer_city || ""
       },
       {
-        key: "period_month",
-        label: "Mois",
-        render: (row) => formatMonthLabel(row.period_month),
-        csvValue: (row) => formatMonthLabel(row.period_month)
-      },
-      {
         key: "invoices_count",
         label: "Factures",
         render: (row) => Number(row.invoices_count || 0),
@@ -460,6 +438,12 @@ const reportConfigs = {
         label: "Marge",
         render: (row) => formatPercent(row.gross_margin_percent),
         csvValue: (row) => row.gross_margin_percent
+      },
+      {
+        key: "first_invoice_date",
+        label: "Premiere vente",
+        render: (row) => formatDate(row.first_invoice_date),
+        csvValue: (row) => formatDate(row.first_invoice_date)
       },
       {
         key: "last_invoice_date",
@@ -621,20 +605,6 @@ export default function ReportsPage() {
   const [data, setData] = useState(null);
 
   const activeConfig = reportConfigs[activeReport];
-  const customerCities = useMemo(
-    () =>
-      [...new Set(customers.map((customer) => customer.city).filter(Boolean))].sort(
-        (left, right) => left.localeCompare(right, "fr", { sensitivity: "base" })
-      ),
-    [customers]
-  );
-  const productCategories = useMemo(
-    () =>
-      [...new Set(products.map((product) => product.category).filter(Boolean))].sort(
-        (left, right) => left.localeCompare(right, "fr", { sensitivity: "base" })
-      ),
-    [products]
-  );
 
   async function fetchLookups() {
     try {
@@ -733,7 +703,20 @@ export default function ReportsPage() {
   }
 
   function handleFilterChange(event) {
-    const { name, value, type, checked } = event.target;
+    const { name, value, type, checked, multiple, options } = event.target;
+
+    if (multiple) {
+      const selectedValues = Array.from(options)
+        .filter((option) => option.selected)
+        .map((option) => option.value);
+
+      setFilters((prev) => ({
+        ...prev,
+        [name]: selectedValues
+      }));
+      return;
+    }
+
     setFilters((prev) => ({
       ...prev,
       [name]: type === "checkbox" ? checked : value
@@ -1031,7 +1014,7 @@ export default function ReportsPage() {
           ) : null}
 
           {activeReport === "product_sales" ? (
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700">
                   Date debut
@@ -1060,128 +1043,68 @@ export default function ReportsPage() {
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Variante d'analyse
+                  Depots
                 </label>
                 <select
-                  name="report_variant"
-                  value={filters.report_variant}
+                  multiple
+                  name="warehouse_ids"
+                  value={filters.warehouse_ids}
                   onChange={handleFilterChange}
-                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                  className="min-h-40 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                 >
-                  <option value="summary">Synthese produit</option>
-                  <option value="by_warehouse">Par depot</option>
-                  <option value="by_customer">Par client</option>
-                  <option value="by_month">Par mois</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Depot
-                </label>
-                <select
-                  name="warehouse_id"
-                  value={filters.warehouse_id}
-                  onChange={handleFilterChange}
-                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-                >
-                  <option value="">Tous les depots</option>
                   {warehouses.map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.name} - {warehouse.city}
                     </option>
                   ))}
                 </select>
+                <div className="mt-2 text-xs text-slate-500">
+                  Maintiens `Ctrl` ou `Cmd` pour choisir plusieurs depots.
+                </div>
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Client
+                  Clients
                 </label>
                 <select
-                  name="customer_id"
-                  value={filters.customer_id}
+                  multiple
+                  name="customer_ids"
+                  value={filters.customer_ids}
                   onChange={handleFilterChange}
-                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                  className="min-h-40 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                 >
-                  <option value="">Tous les clients</option>
                   {customers.map((customer) => (
                     <option key={customer.id} value={customer.id}>
                       {customer.business_name}
                     </option>
                   ))}
                 </select>
+                <div className="mt-2 text-xs text-slate-500">
+                  Tu peux choisir un ou plusieurs clients.
+                </div>
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Produit
+                  Produits
                 </label>
                 <select
-                  name="product_id"
-                  value={filters.product_id}
+                  multiple
+                  name="product_ids"
+                  value={filters.product_ids}
                   onChange={handleFilterChange}
-                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                  className="min-h-40 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                 >
-                  <option value="">Tous les produits</option>
                   {products.map((product) => (
                     <option key={product.id} value={product.id}>
                       {product.name} {product.sku ? `(${product.sku})` : ""}
                     </option>
                   ))}
                 </select>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Ville client
-                </label>
-                <select
-                  name="customer_city"
-                  value={filters.customer_city}
-                  onChange={handleFilterChange}
-                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-                >
-                  <option value="">Toutes les villes</option>
-                  {customerCities.map((city) => (
-                    <option key={city} value={city}>
-                      {city}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Categorie produit
-                </label>
-                <select
-                  name="product_category"
-                  value={filters.product_category}
-                  onChange={handleFilterChange}
-                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-                >
-                  <option value="">Toutes les categories</option>
-                  {productCategories.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  SKU
-                </label>
-                <input
-                  type="text"
-                  name="sku"
-                  value={filters.sku}
-                  onChange={handleFilterChange}
-                  placeholder="Ex. KAB-001"
-                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-                />
+                <div className="mt-2 text-xs text-slate-500">
+                  Tu peux comparer plusieurs produits dans un seul etat.
+                </div>
               </div>
 
               <div>
