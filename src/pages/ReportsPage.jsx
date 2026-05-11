@@ -41,6 +41,23 @@ function formatDate(value) {
   return new Intl.DateTimeFormat("fr-FR").format(date);
 }
 
+function formatMonthLabel(value) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+
+  return new Intl.DateTimeFormat("fr-FR", {
+    month: "long",
+    year: "numeric"
+  }).format(date);
+}
+
 function formatBoolean(value) {
   return value ? "Oui" : "Non";
 }
@@ -57,6 +74,11 @@ function getInitialFilters() {
     warehouse_id: "",
     customer_id: "",
     product_id: "",
+    customer_city: "",
+    product_category: "",
+    sku: "",
+    invoice_status: "",
+    report_variant: "summary",
     low_stock_only: false,
     detail_limit: 20
   };
@@ -325,6 +347,129 @@ const reportConfigs = {
     ],
     emptyText: "Aucune ligne commerciale sur cette periode"
   },
+  product_sales: {
+    exportKey: "product-sales",
+    label: "Analyse ventes par produit",
+    description:
+      "Savoir combien d'un produit a ete vendu sur une periode, par depot, par client ou par mois, avec lecture marge et chiffre d'affaires.",
+    endpoint: "/reports/product-sales",
+    buildParams: (filters, forExport = false) => ({
+      start_date: filters.start_date,
+      end_date: filters.end_date,
+      warehouse_id: filters.warehouse_id || undefined,
+      customer_id: filters.customer_id || undefined,
+      product_id: filters.product_id || undefined,
+      customer_city: filters.customer_city || undefined,
+      product_category: filters.product_category || undefined,
+      sku: filters.sku || undefined,
+      invoice_status: filters.invoice_status || undefined,
+      variant: filters.report_variant || "summary",
+      limit: forExport ? 5000 : 500
+    }),
+    exportFilename: (filters) =>
+      `analyse-ventes-produit-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
+    summaryCards: (summary) => [
+      { title: "Regroupements", value: Number(summary.total_rows || 0) },
+      { title: "Produits", value: Number(summary.total_products || 0) },
+      { title: "Factures", value: Number(summary.total_invoices || 0) },
+      {
+        title: "Quantite vendue",
+        value: formatNumber(summary.total_quantity)
+      },
+      {
+        title: "Chiffre d'affaires",
+        value: formatMoney(summary.total_sales_amount)
+      },
+      {
+        title: "Profit brut",
+        value: formatMoney(summary.gross_profit_amount)
+      },
+      {
+        title: "Marge moyenne",
+        value: formatPercent(summary.gross_margin_percent)
+      }
+    ],
+    columns: [
+      {
+        key: "analysis_label",
+        label: "Analyse",
+        csvValue: (row) => row.analysis_label || ""
+      },
+      {
+        key: "product_name",
+        label: "Produit",
+        csvValue: (row) => row.product_name
+      },
+      {
+        key: "sku",
+        label: "SKU",
+        csvValue: (row) => row.sku || ""
+      },
+      {
+        key: "category",
+        label: "Categorie",
+        csvValue: (row) => row.category || ""
+      },
+      {
+        key: "warehouse_name",
+        label: "Depot",
+        csvValue: (row) => row.warehouse_name || ""
+      },
+      {
+        key: "customer_name",
+        label: "Client",
+        csvValue: (row) => row.customer_name || ""
+      },
+      {
+        key: "customer_city",
+        label: "Ville client",
+        csvValue: (row) => row.customer_city || ""
+      },
+      {
+        key: "period_month",
+        label: "Mois",
+        render: (row) => formatMonthLabel(row.period_month),
+        csvValue: (row) => formatMonthLabel(row.period_month)
+      },
+      {
+        key: "invoices_count",
+        label: "Factures",
+        render: (row) => Number(row.invoices_count || 0),
+        csvValue: (row) => Number(row.invoices_count || 0)
+      },
+      {
+        key: "total_quantity",
+        label: "Quantite",
+        render: (row) => formatNumber(row.total_quantity),
+        csvValue: (row) => row.total_quantity
+      },
+      {
+        key: "total_sales_amount",
+        label: "CA",
+        render: (row) => formatMoney(row.total_sales_amount),
+        csvValue: (row) => row.total_sales_amount
+      },
+      {
+        key: "gross_profit_amount",
+        label: "Profit brut",
+        render: (row) => formatMoney(row.gross_profit_amount),
+        csvValue: (row) => row.gross_profit_amount
+      },
+      {
+        key: "gross_margin_percent",
+        label: "Marge",
+        render: (row) => formatPercent(row.gross_margin_percent),
+        csvValue: (row) => row.gross_margin_percent
+      },
+      {
+        key: "last_invoice_date",
+        label: "Derniere vente",
+        render: (row) => formatDate(row.last_invoice_date),
+        csvValue: (row) => formatDate(row.last_invoice_date)
+      }
+    ],
+    emptyText: "Aucune vente de produit sur cette periode"
+  },
   stock_state: {
     exportKey: "stock-state",
     label: "Etat de stock",
@@ -476,6 +621,20 @@ export default function ReportsPage() {
   const [data, setData] = useState(null);
 
   const activeConfig = reportConfigs[activeReport];
+  const customerCities = useMemo(
+    () =>
+      [...new Set(customers.map((customer) => customer.city).filter(Boolean))].sort(
+        (left, right) => left.localeCompare(right, "fr", { sensitivity: "base" })
+      ),
+    [customers]
+  );
+  const productCategories = useMemo(
+    () =>
+      [...new Set(products.map((product) => product.category).filter(Boolean))].sort(
+        (left, right) => left.localeCompare(right, "fr", { sensitivity: "base" })
+      ),
+    [products]
+  );
 
   async function fetchLookups() {
     try {
@@ -866,6 +1025,179 @@ export default function ReportsPage() {
                       {product.name} {product.sku ? `(${product.sku})` : ""}
                     </option>
                   ))}
+                </select>
+              </div>
+            </div>
+          ) : null}
+
+          {activeReport === "product_sales" ? (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date debut
+                </label>
+                <input
+                  type="date"
+                  name="start_date"
+                  value={filters.start_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date fin
+                </label>
+                <input
+                  type="date"
+                  name="end_date"
+                  value={filters.end_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Variante d'analyse
+                </label>
+                <select
+                  name="report_variant"
+                  value={filters.report_variant}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="summary">Synthese produit</option>
+                  <option value="by_warehouse">Par depot</option>
+                  <option value="by_customer">Par client</option>
+                  <option value="by_month">Par mois</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Depot
+                </label>
+                <select
+                  name="warehouse_id"
+                  value={filters.warehouse_id}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les depots</option>
+                  {warehouses.map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name} - {warehouse.city}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Client
+                </label>
+                <select
+                  name="customer_id"
+                  value={filters.customer_id}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les clients</option>
+                  {customers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.business_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Produit
+                </label>
+                <select
+                  name="product_id"
+                  value={filters.product_id}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les produits</option>
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.name} {product.sku ? `(${product.sku})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Ville client
+                </label>
+                <select
+                  name="customer_city"
+                  value={filters.customer_city}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Toutes les villes</option>
+                  {customerCities.map((city) => (
+                    <option key={city} value={city}>
+                      {city}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Categorie produit
+                </label>
+                <select
+                  name="product_category"
+                  value={filters.product_category}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Toutes les categories</option>
+                  {productCategories.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  SKU
+                </label>
+                <input
+                  type="text"
+                  name="sku"
+                  value={filters.sku}
+                  onChange={handleFilterChange}
+                  placeholder="Ex. KAB-001"
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Statut facture
+                </label>
+                <select
+                  name="invoice_status"
+                  value={filters.invoice_status}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les statuts</option>
+                  <option value="issued">Emise</option>
+                  <option value="partial">Partielle</option>
+                  <option value="paid">Payee</option>
                 </select>
               </div>
             </div>
