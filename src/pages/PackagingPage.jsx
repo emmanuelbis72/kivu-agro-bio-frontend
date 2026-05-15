@@ -7,7 +7,8 @@ import TableCard from "../components/ui/TableCard";
 const packagingTypeOptions = [
   { value: "oil_bottle", label: "Bouteilles huiles" },
   { value: "butter_bottle", label: "Bouteilles beurres" },
-  { value: "kraft_paper", label: "Papiers krafts" }
+  { value: "kraft_paper", label: "Papiers krafts" },
+  { value: "essential_oil_bottle", label: "Bouteilles H. Essentielle" }
 ];
 
 const consumerTypeOptions = [
@@ -132,6 +133,7 @@ export default function PackagingPage() {
   const [overview, setOverview] = useState(null);
   const [consumptions, setConsumptions] = useState([]);
   const [replenishments, setReplenishments] = useState([]);
+  const [usageByInvoice, setUsageByInvoice] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [replenishmentLoading, setReplenishmentLoading] = useState(false);
@@ -155,6 +157,7 @@ export default function PackagingPage() {
         productsResult,
         consumptionsResult,
         replenishmentsResult,
+        usageByInvoiceResult,
         configsResult,
         warehousesResult
       ] =
@@ -168,6 +171,12 @@ export default function PackagingPage() {
             }
           }),
           api.get("/packaging/replenishments", {
+            params: {
+              ...activeFilters,
+              limit: 100
+            }
+          }),
+          api.get("/packaging/usage-by-invoice", {
             params: {
               ...activeFilters,
               limit: 100
@@ -213,6 +222,12 @@ export default function PackagingPage() {
         throw replenishmentsResult.reason;
       }
 
+      if (usageByInvoiceResult.status === "fulfilled") {
+        setUsageByInvoice(usageByInvoiceResult.value.data?.data || []);
+      } else {
+        throw usageByInvoiceResult.reason;
+      }
+
       if (configsResult.status === "fulfilled") {
         const rows = configsResult.value.data?.data || [];
         setFinishedProductConfigs(rows);
@@ -222,6 +237,7 @@ export default function PackagingPage() {
           for (const row of rows) {
             if (!next[row.finished_product_id]) {
               next[row.finished_product_id] = {
+                packaging_type: row.required_packaging_type || "",
                 packaging_product_id: row.packaging_product_id
                   ? String(row.packaging_product_id)
                   : "",
@@ -546,6 +562,7 @@ export default function PackagingPage() {
     setConfigDrafts((current) => ({
       ...current,
       [finishedProductId]: {
+        packaging_type: current[finishedProductId]?.packaging_type ?? "",
         packaging_product_id:
           current[finishedProductId]?.packaging_product_id ?? "",
         packaging_quantity_per_unit:
@@ -566,11 +583,13 @@ export default function PackagingPage() {
       setSuccessMessage("");
 
       const draft = configDrafts[finishedProductId] || {
+        packaging_type: "",
         packaging_product_id: "",
         packaging_quantity_per_unit: 1
       };
 
       await api.put(`/packaging/finished-products/${finishedProductId}/config`, {
+        packaging_type: draft.packaging_type || null,
         packaging_product_id: draft.packaging_product_id || null,
         packaging_quantity_per_unit:
           draft.packaging_product_id === ""
@@ -613,7 +632,7 @@ export default function PackagingPage() {
     <div className="space-y-6">
       <SectionTitle
         title="Emballages"
-        subtitle="Suivi des bouteilles huiles, bouteilles beurres et papiers krafts par depot, periode et consommateur."
+        subtitle="Suivi des papiers krafts, bouteilles huiles, bouteilles beurres et bouteilles H. Essentielle par depot, periode, facture et consommateur."
       />
 
       {error ? (
@@ -1233,12 +1252,67 @@ export default function PackagingPage() {
       />
 
       <TableCard
+        title={`Usage des emballages par facture (${usageByInvoice.length})`}
+        rows={usageByInvoice}
+        emptyText="Aucune consommation d'emballage liee a une facture sur la periode choisie."
+        columns={[
+          {
+            key: "invoice_date",
+            label: "Date facture",
+            render: (row) => formatDate(row.invoice_date)
+          },
+          { key: "invoice_number", label: "Facture" },
+          { key: "customer_name", label: "Client" },
+          { key: "warehouse_name", label: "Depot" },
+          {
+            key: "packaging_type",
+            label: "Type d'emballage",
+            render: (row) => getPackagingTypeLabel(row.packaging_type)
+          },
+          {
+            key: "total_quantity",
+            label: "Quantite utilisee",
+            render: (row) => formatNumber(row.total_quantity)
+          },
+          {
+            key: "consumption_lines_count",
+            label: "Lignes emballages",
+            render: (row) => formatNumber(row.consumption_lines_count)
+          }
+        ]}
+      />
+
+      <TableCard
         title={`Liaison produits finis -> emballages (${finishedProductConfigs.length})`}
         rows={finishedProductConfigs}
         emptyText="Aucun produit fini a configurer."
         columns={[
           { key: "finished_product_name", label: "Produit fini" },
           { key: "finished_product_sku", label: "SKU" },
+          {
+            key: "required_packaging_type",
+            label: "Type d'emballage",
+            render: (row) => (
+              <select
+                value={configDrafts[row.finished_product_id]?.packaging_type ?? ""}
+                onChange={(event) =>
+                  handleConfigDraftChange(
+                    row.finished_product_id,
+                    "packaging_type",
+                    event.target.value
+                  )
+                }
+                className="min-w-[220px] rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              >
+                <option value="">Aucun type impose</option>
+                {packagingTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            )
+          },
           {
             key: "packaging_product_id",
             label: "Emballage lie",
@@ -1258,11 +1332,22 @@ export default function PackagingPage() {
                   className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                 >
                   <option value="">Aucun emballage automatique</option>
-                  {products.map((product) => (
-                    <option key={product.id} value={product.id}>
-                      {product.name}
-                    </option>
-                  ))}
+                  {products
+                    .filter((product) => {
+                      const selectedType =
+                        configDrafts[row.finished_product_id]?.packaging_type || "";
+
+                      if (!selectedType) {
+                        return true;
+                      }
+
+                      return product.packaging_type === selectedType;
+                    })
+                    .map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name}
+                      </option>
+                    ))}
                 </select>
               </div>
             )
@@ -1295,8 +1380,8 @@ export default function PackagingPage() {
             key: "packaging_product_name",
             label: "Type actuel",
             render: (row) =>
-              row.packaging_type
-                ? getPackagingTypeLabel(row.packaging_type)
+              row.required_packaging_type
+                ? getPackagingTypeLabel(row.required_packaging_type)
                 : "Non configure"
           },
           {
@@ -1385,6 +1470,11 @@ export default function PackagingPage() {
             key: "consumption_date",
             label: "Date",
             render: (row) => formatDate(row.consumption_date)
+          },
+          {
+            key: "invoice_number",
+            label: "Facture",
+            render: (row) => row.invoice_number || "-"
           },
           {
             key: "consumer_name",
