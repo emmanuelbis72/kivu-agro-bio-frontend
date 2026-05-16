@@ -45,6 +45,12 @@ function formatBoolean(value) {
   return value ? "Oui" : "Non";
 }
 
+function compareAlphabetic(leftValue, rightValue) {
+  return String(leftValue || "").localeCompare(String(rightValue || ""), "fr", {
+    sensitivity: "base"
+  });
+}
+
 function getInitialFilters() {
   const endDate = new Date();
   const startDate = new Date();
@@ -715,6 +721,28 @@ export default function ReportsPage() {
   const [data, setData] = useState(null);
 
   const activeConfig = reportConfigs[activeReport];
+  const sortedWarehouses = useMemo(
+    () =>
+      [...warehouses].sort((left, right) => {
+        const nameCompare = compareAlphabetic(left.name, right.name);
+        return nameCompare !== 0
+          ? nameCompare
+          : compareAlphabetic(left.city, right.city);
+      }),
+    [warehouses]
+  );
+  const sortedCustomers = useMemo(
+    () =>
+      [...customers].sort((left, right) =>
+        compareAlphabetic(left.business_name, right.business_name)
+      ),
+    [customers]
+  );
+  const sortedProducts = useMemo(
+    () =>
+      [...products].sort((left, right) => compareAlphabetic(left.name, right.name)),
+    [products]
+  );
 
   async function fetchLookups() {
     try {
@@ -1026,7 +1054,7 @@ export default function ReportsPage() {
                   className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                 >
                   <option value="">Tous les depots</option>
-                  {warehouses.map((warehouse) => (
+                  {sortedWarehouses.map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.name} - {warehouse.city}
                     </option>
@@ -1075,7 +1103,7 @@ export default function ReportsPage() {
                   className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                 >
                   <option value="">Tous les depots</option>
-                  {warehouses.map((warehouse) => (
+                  {sortedWarehouses.map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.name} - {warehouse.city}
                     </option>
@@ -1094,7 +1122,7 @@ export default function ReportsPage() {
                   className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                 >
                   <option value="">Tous les clients</option>
-                  {customers.map((customer) => (
+                  {sortedCustomers.map((customer) => (
                     <option key={customer.id} value={customer.id}>
                       {customer.business_name}
                     </option>
@@ -1113,7 +1141,7 @@ export default function ReportsPage() {
                   className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                 >
                   <option value="">Tous les produits</option>
-                  {products.map((product) => (
+                  {sortedProducts.map((product) => (
                     <option key={product.id} value={product.id}>
                       {product.name} {product.sku ? `(${product.sku})` : ""}
                     </option>
@@ -1162,7 +1190,7 @@ export default function ReportsPage() {
                   onChange={handleFilterChange}
                   className="min-h-40 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                 >
-                  {warehouses.map((warehouse) => (
+                  {sortedWarehouses.map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.name} - {warehouse.city}
                     </option>
@@ -1184,7 +1212,7 @@ export default function ReportsPage() {
                   onChange={handleFilterChange}
                   className="min-h-40 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                 >
-                  {customers.map((customer) => (
+                  {sortedCustomers.map((customer) => (
                     <option key={customer.id} value={customer.id}>
                       {customer.business_name}
                     </option>
@@ -1206,7 +1234,7 @@ export default function ReportsPage() {
                   onChange={handleFilterChange}
                   className="min-h-40 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                 >
-                  {products.map((product) => (
+                  {sortedProducts.map((product) => (
                     <option key={product.id} value={product.id}>
                       {product.name} {product.sku ? `(${product.sku})` : ""}
                     </option>
@@ -1268,7 +1296,7 @@ export default function ReportsPage() {
                   className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                 >
                   <option value="">Tous les depots</option>
-                  {warehouses.map((warehouse) => (
+                  {sortedWarehouses.map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.name} - {warehouse.city}
                     </option>
@@ -1287,7 +1315,7 @@ export default function ReportsPage() {
                   className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                 >
                   <option value="">Tous les produits</option>
-                  {products.map((product) => (
+                  {sortedProducts.map((product) => (
                     <option key={product.id} value={product.id}>
                       {product.name} {product.sku ? `(${product.sku})` : ""}
                     </option>

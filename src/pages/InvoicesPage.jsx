@@ -72,6 +72,12 @@ function getVariantLabel(item) {
   return item?.product_role === "finished_product" ? "Produit fini" : "Produit";
 }
 
+function compareAlphabetic(leftValue, rightValue) {
+  return String(leftValue || "").localeCompare(String(rightValue || ""), "fr", {
+    sensitivity: "base"
+  });
+}
+
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -86,6 +92,7 @@ export default function InvoicesPage() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [search, setSearch] = useState("");
+  const [lineSearch, setLineSearch] = useState("");
   const [form, setForm] = useState(initialForm);
   const [editingInvoiceId, setEditingInvoiceId] = useState(null);
 
@@ -163,8 +170,30 @@ export default function InvoicesPage() {
     setEditingInvoiceId(null);
   }
 
+  const sortedCustomers = useMemo(
+    () =>
+      [...customers].sort((left, right) =>
+        compareAlphabetic(left.business_name, right.business_name)
+      ),
+    [customers]
+  );
+
+  const sortedWarehouses = useMemo(
+    () =>
+      [...warehouses].sort((left, right) => {
+        const labelCompare = compareAlphabetic(left.name, right.name);
+        return labelCompare !== 0
+          ? labelCompare
+          : compareAlphabetic(left.city, right.city);
+      }),
+    [warehouses]
+  );
+
   const saleProducts = useMemo(
-    () => products.filter((product) => product.product_role === "finished_product"),
+    () =>
+      products
+        .filter((product) => product.product_role === "finished_product")
+        .sort((left, right) => compareAlphabetic(left.name, right.name)),
     [products]
   );
 
@@ -185,13 +214,13 @@ export default function InvoicesPage() {
 
   const availableWarehouses = useMemo(() => {
     if (!selectedCustomerWarehouseId) {
-      return warehouses;
+      return sortedWarehouses;
     }
 
-    return warehouses.filter(
+    return sortedWarehouses.filter(
       (warehouse) => String(warehouse.id) === selectedCustomerWarehouseId
     );
-  }, [warehouses, selectedCustomerWarehouseId]);
+  }, [sortedWarehouses, selectedCustomerWarehouseId]);
 
   useEffect(() => {
     if (!form.customer_id) {
@@ -275,6 +304,21 @@ export default function InvoicesPage() {
     };
   }, [form]);
 
+  const selectedInvoiceItems = useMemo(() => {
+    const items = Array.isArray(selectedInvoice?.items) ? selectedInvoice.items : [];
+    const keyword = lineSearch.trim().toLowerCase();
+
+    if (!keyword) {
+      return items;
+    }
+
+    return items.filter((item) =>
+      [item.product_name, item.sku, item.barcode]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(keyword))
+    );
+  }, [lineSearch, selectedInvoice]);
+
   async function handleSubmit(event) {
     event.preventDefault();
 
@@ -303,6 +347,15 @@ export default function InvoicesPage() {
         quantity: Number(item.quantity),
         unit_price: Number(item.unit_price)
       }));
+
+      const distinctProductIds = normalizedItems
+        .map((item) => item.product_id)
+        .filter((productId) => Number.isInteger(productId) && productId > 0);
+
+      if (new Set(distinctProductIds).size !== distinctProductIds.length) {
+        setError("Une meme facture ne peut pas contenir deux lignes pour le meme produit.");
+        return;
+      }
 
       const invalidItem = normalizedItems.find(
         (item) =>
@@ -383,6 +436,7 @@ export default function InvoicesPage() {
 
       const response = await api.get(`/invoices/${invoiceId}`);
       setSelectedInvoice(response.data.data || null);
+      setLineSearch("");
     } catch (err) {
       setError(
         err?.response?.data?.message ||
@@ -415,6 +469,7 @@ export default function InvoicesPage() {
 
       setEditingInvoiceId(invoice.id);
       setSelectedInvoice(invoice);
+      setLineSearch("");
       setForm({
         customer_id: String(invoice.customer_id || ""),
         warehouse_id: String(invoice.warehouse_id || ""),
@@ -552,7 +607,7 @@ export default function InvoicesPage() {
                 className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
               >
                 <option value="">Selectionner</option>
-                {customers.map((customer) => (
+                {sortedCustomers.map((customer) => (
                   <option key={customer.id} value={customer.id}>
                     {customer.business_name}
                   </option>
@@ -676,11 +731,24 @@ export default function InvoicesPage() {
                       className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                     >
                       <option value="">Selectionner</option>
-                      {saleProducts.map((product) => (
-                        <option key={product.id} value={product.id}>
-                          {product.name} ({product.sku})
-                        </option>
-                      ))}
+                      {saleProducts
+                        .filter((product) => {
+                          const selectedOnOtherLine = form.items.some(
+                            (currentItem, currentIndex) =>
+                              currentIndex !== index &&
+                              Number(currentItem.product_id) === Number(product.id)
+                          );
+
+                          return (
+                            !selectedOnOtherLine ||
+                            Number(item.product_id) === Number(product.id)
+                          );
+                        })
+                        .map((product) => (
+                          <option key={product.id} value={product.id}>
+                            {product.name} ({product.sku})
+                          </option>
+                        ))}
                     </select>
                   </div>
 
@@ -877,9 +945,18 @@ export default function InvoicesPage() {
             </div>
           </div>
 
+          <div className="mb-5">
+            <input
+              value={lineSearch}
+              onChange={(e) => setLineSearch(e.target.value)}
+              placeholder="Rechercher une ligne de facture..."
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500 md:w-96"
+            />
+          </div>
+
           <TableCard
             title="Lignes de facture"
-            rows={selectedInvoice.items || []}
+            rows={selectedInvoiceItems}
             emptyText="Aucune ligne"
             columns={[
               { key: "product_name", label: "Produit" },

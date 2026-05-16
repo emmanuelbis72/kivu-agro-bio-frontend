@@ -83,6 +83,12 @@ function getAccountingBadge(row) {
   );
 }
 
+function compareAlphabetic(leftValue, rightValue) {
+  return String(leftValue || "").localeCompare(String(rightValue || ""), "fr", {
+    sensitivity: "base"
+  });
+}
+
 export default function PaymentsPage() {
   const [invoices, setInvoices] = useState([]);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
@@ -392,12 +398,24 @@ export default function PaymentsPage() {
 
   const filteredInvoices = useMemo(() => {
     const keyword = search.trim().toLowerCase();
+    const sortedInvoices = [...invoices].sort((left, right) => {
+      const customerCompare = compareAlphabetic(
+        left.customer_name,
+        right.customer_name
+      );
+
+      if (customerCompare !== 0) {
+        return customerCompare;
+      }
+
+      return compareAlphabetic(left.invoice_number, right.invoice_number);
+    });
 
     if (!keyword) {
-      return invoices;
+      return sortedInvoices;
     }
 
-    return invoices.filter((invoice) =>
+    return sortedInvoices.filter((invoice) =>
       [
         invoice.invoice_number,
         invoice.customer_name,
