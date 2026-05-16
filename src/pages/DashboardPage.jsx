@@ -351,6 +351,232 @@ function SalesPulseChart({ rows }) {
   );
 }
 
+function MultiSeriesLineChart({
+  title,
+  subtitle,
+  rows,
+  series,
+  valueFormatter = formatMoney,
+  emptyText = "Aucune tendance disponible"
+}) {
+  const chartRows = Array.isArray(rows) ? rows : [];
+  const activeSeries = Array.isArray(series) ? series.filter(Boolean) : [];
+  const width = 720;
+  const height = 260;
+  const padding = { top: 18, right: 18, bottom: 42, left: 18 };
+  const innerWidth = width - padding.left - padding.right;
+  const innerHeight = height - padding.top - padding.bottom;
+  const maxValue = Math.max(
+    ...chartRows.flatMap((row) =>
+      activeSeries.map((item) => Number(row?.[item.key] || 0))
+    ),
+    0
+  );
+
+  function getX(index) {
+    if (chartRows.length <= 1) {
+      return padding.left + innerWidth / 2;
+    }
+
+    return padding.left + (index / (chartRows.length - 1)) * innerWidth;
+  }
+
+  function getY(value) {
+    if (maxValue <= 0) {
+      return padding.top + innerHeight;
+    }
+
+    return padding.top + innerHeight - (Number(value || 0) / maxValue) * innerHeight;
+  }
+
+  function buildPath(key) {
+    return chartRows
+      .map((row, index) => `${index === 0 ? "M" : "L"} ${getX(index)} ${getY(row[key])}`)
+      .join(" ");
+  }
+
+  return (
+    <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+      <div className="mb-2 text-lg font-semibold text-slate-900">{title}</div>
+      {subtitle ? (
+        <div className="mb-5 text-sm text-slate-500">{subtitle}</div>
+      ) : null}
+
+      {chartRows.length === 0 || activeSeries.length === 0 ? (
+        <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+          {emptyText}
+        </div>
+      ) : (
+        <>
+          <div className="mb-4 flex flex-wrap gap-4 text-xs text-slate-500">
+            {activeSeries.map((item) => (
+              <span key={item.key} className="inline-flex items-center gap-2">
+                <span
+                  className="h-3 w-3 rounded-full"
+                  style={{ backgroundColor: item.color }}
+                />
+                {item.label}
+              </span>
+            ))}
+          </div>
+
+          <div className="overflow-x-auto">
+            <div className="min-w-[760px]">
+              <svg viewBox={`0 0 ${width} ${height}`} className="h-[260px] w-full">
+                {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+                  const y = padding.top + innerHeight - innerHeight * ratio;
+
+                  return (
+                    <line
+                      key={ratio}
+                      x1={padding.left}
+                      x2={width - padding.right}
+                      y1={y}
+                      y2={y}
+                      stroke="#E2E8F0"
+                      strokeDasharray="4 4"
+                    />
+                  );
+                })}
+
+                {activeSeries.map((item) => (
+                  <path
+                    key={item.key}
+                    d={buildPath(item.key)}
+                    fill="none"
+                    stroke={item.color}
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                ))}
+
+                {activeSeries.map((item) =>
+                  chartRows.map((row, index) => (
+                    <circle
+                      key={`${item.key}-${row.period}-${index}`}
+                      cx={getX(index)}
+                      cy={getY(row[item.key])}
+                      r="4"
+                      fill={item.color}
+                    >
+                      <title>
+                        {`${item.label} | ${row.period} : ${valueFormatter(row[item.key])}`}
+                      </title>
+                    </circle>
+                  ))
+                )}
+
+                {chartRows.map((row, index) => (
+                  <text
+                    key={row.period}
+                    x={getX(index)}
+                    y={height - 12}
+                    textAnchor="middle"
+                    fontSize="11"
+                    fill="#64748B"
+                  >
+                    {row.period}
+                  </text>
+                ))}
+              </svg>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function DualMetricRankingChart({
+  title,
+  subtitle,
+  rows,
+  labelKey,
+  primaryKey,
+  secondaryKey,
+  primaryLabel,
+  secondaryLabel,
+  primaryColor = "bg-brand-500",
+  secondaryColor = "bg-emerald-500",
+  valueFormatter = formatMoney,
+  emptyText = "Aucune donnee"
+}) {
+  const maxValue = Math.max(
+    ...rows.flatMap((row) => [
+      Number(row?.[primaryKey] || 0),
+      Number(row?.[secondaryKey] || 0)
+    ]),
+    0
+  );
+
+  return (
+    <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+      <div className="mb-2 text-lg font-semibold text-slate-900">{title}</div>
+      {subtitle ? (
+        <div className="mb-5 text-sm text-slate-500">{subtitle}</div>
+      ) : null}
+
+      <div className="mb-4 flex flex-wrap gap-4 text-xs text-slate-500">
+        <span className="inline-flex items-center gap-2">
+          <span className={`h-3 w-3 rounded-full ${primaryColor}`} />
+          {primaryLabel}
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <span className={`h-3 w-3 rounded-full ${secondaryColor}`} />
+          {secondaryLabel}
+        </span>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+          {emptyText}
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {rows.map((row, index) => {
+            const primaryValue = Number(row[primaryKey] || 0);
+            const secondaryValue = Number(row[secondaryKey] || 0);
+            const primaryWidth =
+              maxValue > 0 ? Math.max((primaryValue / maxValue) * 100, 2) : 0;
+            const secondaryWidth =
+              maxValue > 0 ? Math.max((secondaryValue / maxValue) * 100, 2) : 0;
+
+            return (
+              <div key={`${row[labelKey]}-${index}`} className="space-y-2">
+                <div className="flex items-center justify-between gap-4 text-sm">
+                  <div className="font-medium text-slate-700">
+                    {row[labelKey] || "-"}
+                  </div>
+                  <div className="text-right text-xs text-slate-500">
+                    <div>{primaryLabel}: {valueFormatter(primaryValue)}</div>
+                    <div>{secondaryLabel}: {valueFormatter(secondaryValue)}</div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="h-3 rounded-full bg-slate-100">
+                    <div
+                      className={`h-3 rounded-full ${primaryColor}`}
+                      style={{ width: `${primaryWidth}%` }}
+                    />
+                  </div>
+                  <div className="h-3 rounded-full bg-slate-100">
+                    <div
+                      className={`h-3 rounded-full ${secondaryColor}`}
+                      style={{ width: `${secondaryWidth}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TimelineChart({
   title,
   rows,
@@ -611,6 +837,65 @@ export default function DashboardPage() {
       ) || null,
     [accountingData]
   );
+  const executiveComparisonRows = overviewData?.executive_comparison_timeline || [];
+  const executiveComparisonSeries = useMemo(
+    () => [
+      { key: "invoiced_amount", label: "Factures emises", color: "#2563EB" },
+      { key: "payments_received", label: "Paiements recus", color: "#059669" },
+      { key: "expenses_amount", label: "Depenses", color: "#DC2626" },
+      { key: "gross_profit_amount", label: "Benefice brut", color: "#7C3AED" }
+    ],
+    []
+  );
+  const topPayingCustomers = commercialData?.top_paying_customers || [];
+  const mostProfitableProducts = commercialData?.most_profitable_products || [];
+  const clientSalesTrend = useMemo(() => {
+    const rows = commercialData?.customer_monthly_trend || [];
+
+    if (rows.length === 0) {
+      return {
+        salesRows: [],
+        paymentRows: [],
+        series: []
+      };
+    }
+
+    const series = [...new Set(rows.map((row) => row.business_name).filter(Boolean))]
+      .slice(0, 5)
+      .map((name, index) => ({
+        key: `client_${index}`,
+        label: name,
+        color: ["#0F766E", "#2563EB", "#EA580C", "#7C3AED", "#E11D48"][index] || "#475569"
+      }));
+
+    const salesPeriodMap = new Map();
+    const paymentPeriodMap = new Map();
+
+    rows.forEach((row) => {
+      if (!salesPeriodMap.has(row.period)) {
+        salesPeriodMap.set(row.period, { period: row.period });
+      }
+
+      if (!paymentPeriodMap.has(row.period)) {
+        paymentPeriodMap.set(row.period, { period: row.period });
+      }
+
+      const salesTarget = salesPeriodMap.get(row.period);
+      const paymentTarget = paymentPeriodMap.get(row.period);
+      const matchingSeries = series.find((item) => item.label === row.business_name);
+
+      if (matchingSeries) {
+        salesTarget[matchingSeries.key] = Number(row.billed_amount || 0);
+        paymentTarget[matchingSeries.key] = Number(row.payments_received || 0);
+      }
+    });
+
+    return {
+      salesRows: [...salesPeriodMap.values()],
+      paymentRows: [...paymentPeriodMap.values()],
+      series
+    };
+  }, [commercialData]);
 
   const directionSignals = useMemo(
     () => [
@@ -840,7 +1125,14 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-            <SalesPulseChart rows={overviewData?.sales_overview || []} />
+            <MultiSeriesLineChart
+              title="Evolution comparee factures / paiements / depenses / benefice"
+              subtitle="Lecture mensuelle pour rapprocher facturation, encaissement reel, depenses engagees et profit brut."
+              rows={executiveComparisonRows}
+              series={executiveComparisonSeries}
+              valueFormatter={formatMoney}
+              emptyText="Aucune serie executive disponible"
+            />
 
             <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
               <div className="mb-2 text-lg font-semibold text-slate-900">
@@ -866,6 +1158,25 @@ export default function DashboardPage() {
                 ))}
               </div>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <SalesPulseChart rows={overviewData?.sales_overview || []} />
+
+            <DualMetricRankingChart
+              title="Clients qui facturent et paient le plus"
+              subtitle="Comparaison directe entre ventes facturees et encaissements reels par client."
+              rows={topPayingCustomers}
+              labelKey="business_name"
+              primaryKey="total_sales_amount"
+              secondaryKey="total_collected_amount"
+              primaryLabel="Facture"
+              secondaryLabel="Paye"
+              primaryColor="bg-brand-500"
+              secondaryColor="bg-emerald-500"
+              valueFormatter={formatMoney}
+              emptyText="Aucun client compare"
+            />
           </div>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -963,20 +1274,68 @@ export default function DashboardPage() {
             />
 
             <HorizontalBarChart
-              title="Top produits par chiffre d'affaires"
+              title="Produits les plus vendus"
               rows={commercialData?.sales_by_product || []}
               labelKey="product_name"
-              valueKey="total_sales_amount"
-              helperText="References qui tirent la vente et la marge."
+              valueKey="total_quantity_sold"
+              helperText="Classement des produits qui sortent le plus en quantite sur la periode."
               colorClass="bg-brand-500"
-              valueFormatter={formatMoney}
+              valueFormatter={formatNumber}
               emptyText="Aucun produit facture"
             />
           </div>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <HorizontalBarChart
+              title="Produits les plus rentables"
+              rows={mostProfitableProducts}
+              labelKey="product_name"
+              valueKey="gross_profit_amount"
+              helperText="Liste des produits qui apportent le plus de benefice brut sur la periode."
+              colorClass="bg-emerald-500"
+              valueFormatter={formatMoney}
+              emptyText="Aucun produit rentable calcule"
+            />
+
+            <DualMetricRankingChart
+              title="Qui paie le plus"
+              subtitle="Comparer rapidement les encaissements reels aux factures emises par client."
+              rows={topPayingCustomers}
+              labelKey="business_name"
+              primaryKey="total_collected_amount"
+              secondaryKey="total_receivables"
+              primaryLabel="Encaisse"
+              secondaryLabel="Reste du"
+              primaryColor="bg-emerald-500"
+              secondaryColor="bg-amber-500"
+              valueFormatter={formatMoney}
+              emptyText="Aucun encaissement client"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <MultiSeriesLineChart
+              title="Evolution des ventes suivant les clients"
+              subtitle="Tendance mensuelle des meilleurs clients, pour voir qui porte vraiment la croissance."
+              rows={clientSalesTrend.salesRows}
+              series={clientSalesTrend.series}
+              valueFormatter={formatMoney}
+              emptyText="Aucune evolution client disponible"
+            />
+
+            <MultiSeriesLineChart
+              title="Evolution des paiements suivant les clients"
+              subtitle="Lecture des encaissements reels des meilleurs clients mois par mois."
+              rows={clientSalesTrend.paymentRows}
+              series={clientSalesTrend.series}
+              valueFormatter={formatMoney}
+              emptyText="Aucune evolution de paiement client disponible"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <TableCard
-              title="Top clients"
+              title="Top clients par ventes"
               rows={commercialData?.sales_by_customer || []}
               emptyText="Aucun client facture"
               columns={[
@@ -991,6 +1350,11 @@ export default function DashboardPage() {
                   key: "total_sales_amount",
                   label: "Ventes",
                   render: (row) => formatMoney(row.total_sales_amount)
+                },
+                {
+                  key: "total_collected_amount",
+                  label: "Paye",
+                  render: (row) => formatMoney(row.total_collected_amount)
                 },
                 {
                   key: "gross_profit_amount",

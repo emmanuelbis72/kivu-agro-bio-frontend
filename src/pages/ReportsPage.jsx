@@ -60,6 +60,7 @@ function getInitialFilters() {
     warehouse_ids: [],
     customer_ids: [],
     product_ids: [],
+    invoice_number: "",
     invoice_status: "",
     low_stock_only: false,
     detail_limit: 20
@@ -328,6 +329,115 @@ const reportConfigs = {
       }
     ],
     emptyText: "Aucune ligne commerciale sur cette periode"
+  },
+  product_ledger: {
+    exportKey: "product-ledger",
+    label: "Compte courant produits",
+    description:
+      "Suivre produit par produit les lignes facturees, les quantites vendues, les clients, les depots et les factures sur une periode.",
+    endpoint: "/reports/product-ledger",
+    buildParams: (filters, forExport = false) => ({
+      start_date: filters.start_date,
+      end_date: filters.end_date,
+      warehouse_ids:
+        Array.isArray(filters.warehouse_ids) && filters.warehouse_ids.length > 0
+          ? filters.warehouse_ids.join(",")
+          : undefined,
+      customer_ids:
+        Array.isArray(filters.customer_ids) && filters.customer_ids.length > 0
+          ? filters.customer_ids.join(",")
+          : undefined,
+      product_ids:
+        Array.isArray(filters.product_ids) && filters.product_ids.length > 0
+          ? filters.product_ids.join(",")
+          : undefined,
+      invoice_status: filters.invoice_status || undefined,
+      invoice_number: filters.invoice_number || undefined,
+      limit: forExport ? 5000 : 500
+    }),
+    exportFilename: (filters) =>
+      `compte-courant-produits-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
+    summaryCards: (summary) => [
+      { title: "Lignes", value: Number(summary.total_lines || 0) },
+      { title: "Factures", value: Number(summary.total_invoices || 0) },
+      { title: "Produits", value: Number(summary.total_products || 0) },
+      { title: "Clients", value: Number(summary.total_customers || 0) },
+      { title: "Depots", value: Number(summary.total_warehouses || 0) },
+      {
+        title: "Quantite vendue",
+        value: formatNumber(summary.total_quantity)
+      },
+      {
+        title: "Chiffre d'affaires",
+        value: formatMoney(summary.total_sales_amount)
+      },
+      {
+        title: "Profit brut",
+        value: formatMoney(summary.gross_profit_amount)
+      },
+      {
+        title: "Paye facture",
+        value: formatMoney(summary.total_paid_amount)
+      },
+      {
+        title: "Solde facture",
+        value: formatMoney(summary.total_balance_due)
+      }
+    ],
+    columns: [
+      { key: "invoice_number", label: "Facture", csvValue: (row) => row.invoice_number },
+      {
+        key: "invoice_date",
+        label: "Date",
+        render: (row) => formatDate(row.invoice_date),
+        csvValue: (row) => formatDate(row.invoice_date)
+      },
+      { key: "product_name", label: "Produit", csvValue: (row) => row.product_name },
+      { key: "customer_name", label: "Client", csvValue: (row) => row.customer_name },
+      { key: "warehouse_name", label: "Depot", csvValue: (row) => row.warehouse_name },
+      {
+        key: "invoice_status",
+        label: "Statut",
+        csvValue: (row) => row.invoice_status
+      },
+      {
+        key: "quantity",
+        label: "Qte",
+        render: (row) => formatNumber(row.quantity),
+        csvValue: (row) => row.quantity
+      },
+      {
+        key: "unit_price",
+        label: "P.U.",
+        render: (row) => formatMoney(row.unit_price),
+        csvValue: (row) => row.unit_price
+      },
+      {
+        key: "line_total",
+        label: "CA",
+        render: (row) => formatMoney(row.line_total),
+        csvValue: (row) => row.line_total
+      },
+      {
+        key: "gross_profit_amount",
+        label: "Profit brut",
+        render: (row) => formatMoney(row.gross_profit_amount),
+        csvValue: (row) => row.gross_profit_amount
+      },
+      {
+        key: "invoice_paid_amount",
+        label: "Paye facture",
+        render: (row) => formatMoney(row.invoice_paid_amount),
+        csvValue: (row) => row.invoice_paid_amount
+      },
+      {
+        key: "invoice_balance_due",
+        label: "Solde facture",
+        render: (row) => formatMoney(row.invoice_balance_due),
+        csvValue: (row) => row.invoice_balance_due
+      }
+    ],
+    emptyText: "Aucune ligne de compte produit sur cette periode"
   },
   product_sales: {
     exportKey: "product-sales",
@@ -1013,8 +1123,8 @@ export default function ReportsPage() {
             </div>
           ) : null}
 
-          {activeReport === "product_sales" ? (
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+          {activeReport === "product_sales" || activeReport === "product_ledger" ? (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700">
                   Date debut
@@ -1106,6 +1216,25 @@ export default function ReportsPage() {
                   Tu peux comparer plusieurs produits dans un seul etat.
                 </div>
               </div>
+
+              {activeReport === "product_ledger" ? (
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Numero de facture
+                  </label>
+                  <input
+                    type="text"
+                    name="invoice_number"
+                    value={filters.invoice_number}
+                    onChange={handleFilterChange}
+                    placeholder="Ex: 004/03-2026"
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                  />
+                  <div className="mt-2 text-xs text-slate-500">
+                    Optionnel pour isoler une facture precise.
+                  </div>
+                </div>
+              ) : null}
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700">
