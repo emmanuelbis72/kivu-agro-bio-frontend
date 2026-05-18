@@ -1209,13 +1209,39 @@ export default function DashboardPage() {
 
       {activeTab === "direction" ? (
         <div className="space-y-8">
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <MultiSeriesLineChart
+            title="Evolution comparee factures / paiements / depenses / benefice"
+            subtitle="Lecture mensuelle pour rapprocher facturation, encaissement reel, depenses engagees et profit brut."
+            rows={executiveComparisonRows}
+            series={executiveComparisonSeries}
+            valueFormatter={formatMoney}
+            emptyText="Aucune serie executive disponible"
+          />
+
+          <SalesPulseChart rows={overviewData?.sales_overview || []} />
+
+          <CustomerBalanceBoardTable board={customerBalanceBoard} />
+
+          <DualMetricRankingChart
+            title="Clients qui facturent et paient le plus"
+            subtitle="Comparaison directe entre ventes facturees et encaissements reels par client."
+            rows={topPayingCustomers}
+            labelKey="business_name"
+            primaryKey="total_sales_amount"
+            secondaryKey="total_collected_amount"
+            primaryLabel="Facture"
+            secondaryLabel="Paye"
+            primaryColor="bg-brand-500"
+            secondaryColor="bg-emerald-500"
+            valueFormatter={formatMoney}
+            emptyText="Aucun client compare"
+          />
+
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
             <HeroMetricCard
               title="Chiffre d'affaires facture"
               value={formatMoney(stats.total_sales_amount)}
-              subtitle={`${Number(stats.total_invoices || 0)} facture(s) emise(s) et ${formatMoney(
-                stats.total_collected_amount
-              )} deja encaisse(s)`}
+              subtitle={`${Number(stats.total_invoices || 0)} facture(s) emise(s)`}
               tone="brand"
             />
             <HeroMetricCard
@@ -1225,26 +1251,10 @@ export default function DashboardPage() {
               tone="emerald"
             />
             <HeroMetricCard
-              title="Base cash observee"
-              value={formatMoney(cashSummary.current_cash_base)}
-              subtitle="Paiements clients - paiements fournisseurs - depenses"
+              title="Paiements clients"
+              value={formatMoney(stats.total_payments_received)}
+              subtitle={`${formatMoney(stats.total_receivables)} encore en attente`}
               tone="amber"
-            />
-            <HeroMetricCard
-              title="Projection J+30"
-              value={formatMoney(projected30Days?.projected_balance)}
-              subtitle={
-                projected30Days
-                  ? `${formatMoney(projected30Days.expected_inflows)} a encaisser / ${formatMoney(
-                      projected30Days.expected_outflows
-                    )} a decaisser`
-                  : "Aucune projection disponible"
-              }
-              tone={
-                Number(projected30Days?.projected_balance || 0) >= 0
-                  ? "slate"
-                  : "red"
-              }
             />
           </div>
 
@@ -1258,61 +1268,6 @@ export default function DashboardPage() {
                 tone={signal.tone}
               />
             ))}
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-            <MultiSeriesLineChart
-              title="Evolution comparee factures / paiements / depenses / benefice"
-              subtitle="Lecture mensuelle pour rapprocher facturation, encaissement reel, depenses engagees et profit brut."
-              rows={executiveComparisonRows}
-              series={executiveComparisonSeries}
-              valueFormatter={formatMoney}
-              emptyText="Aucune serie executive disponible"
-            />
-
-            <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
-              <div className="mb-2 text-lg font-semibold text-slate-900">
-                Priorites direction
-              </div>
-              <div className="mb-5 text-sm text-slate-500">
-                Lecture actionable des urgences et opportunites du moment.
-              </div>
-
-              <div className="space-y-4">
-                {dashboardActions.map((item, index) => (
-                  <div
-                    key={`${item.title}-${index}`}
-                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                  >
-                    <div className="text-sm font-semibold text-slate-900">
-                      {item.title}
-                    </div>
-                    <div className="mt-2 text-sm leading-6 text-slate-600">
-                      {item.detail}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <SalesPulseChart rows={overviewData?.sales_overview || []} />
-
-            <DualMetricRankingChart
-              title="Clients qui facturent et paient le plus"
-              subtitle="Comparaison directe entre ventes facturees et encaissements reels par client."
-              rows={topPayingCustomers}
-              labelKey="business_name"
-              primaryKey="total_sales_amount"
-              secondaryKey="total_collected_amount"
-              primaryLabel="Facture"
-              secondaryLabel="Paye"
-              primaryColor="bg-brand-500"
-              secondaryColor="bg-emerald-500"
-              valueFormatter={formatMoney}
-              emptyText="Aucun client compare"
-            />
           </div>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -1369,8 +1324,6 @@ export default function DashboardPage() {
               ]}
             />
           </div>
-
-          <CustomerBalanceBoardTable board={customerBalanceBoard} />
         </div>
       ) : null}
 
