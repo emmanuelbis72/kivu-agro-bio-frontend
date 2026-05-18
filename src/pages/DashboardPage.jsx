@@ -577,6 +577,138 @@ function DualMetricRankingChart({
   );
 }
 
+function CustomerBalanceBoardTable({ board }) {
+  const rows = Array.isArray(board?.rows) ? board.rows : [];
+  const totals = board?.totals || {};
+
+  function getBalanceClass(value) {
+    const numericValue = Number(value || 0);
+
+    if (numericValue > 0) {
+      return "text-amber-700";
+    }
+
+    if (numericValue < 0) {
+      return "text-emerald-700";
+    }
+
+    return "text-slate-700";
+  }
+
+  return (
+    <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+      <div className="mb-2 text-lg font-semibold text-slate-900">
+        Bilan clients
+      </div>
+      <div className="mb-5 text-sm text-slate-500">
+        Vue par client avec un cote factures, un cote paiements et la balance restante a equilibrer.
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+          Aucun client facture pour ce bilan
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200">
+                <th className="px-3 py-3 text-left font-semibold text-slate-600">
+                  Client
+                </th>
+                <th className="px-3 py-3 text-right font-semibold text-slate-600">
+                  Factures
+                </th>
+                <th className="px-3 py-3 text-right font-semibold text-slate-600">
+                  Paiements
+                </th>
+                <th className="px-3 py-3 text-right font-semibold text-slate-600">
+                  Balance
+                </th>
+                <th className="px-3 py-3 text-right font-semibold text-slate-600">
+                  Nb factures
+                </th>
+                <th className="px-3 py-3 text-right font-semibold text-slate-600">
+                  Nb paiements
+                </th>
+                <th className="px-3 py-3 text-left font-semibold text-slate-600">
+                  Dernier paiement
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr
+                  key={row.customer_id}
+                  className="border-b border-slate-100 last:border-b-0"
+                >
+                  <td className="px-3 py-3">
+                    <div className="font-medium text-slate-800">
+                      {row.business_name}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {row.city || "Ville non renseignee"}
+                    </div>
+                  </td>
+                  <td className="px-3 py-3 text-right text-slate-700">
+                    {formatMoney(row.invoiced_amount)}
+                  </td>
+                  <td className="px-3 py-3 text-right text-slate-700">
+                    {formatMoney(row.paid_amount)}
+                  </td>
+                  <td
+                    className={`px-3 py-3 text-right font-semibold ${getBalanceClass(
+                      row.balance_amount
+                    )}`}
+                  >
+                    {formatMoney(row.balance_amount)}
+                  </td>
+                  <td className="px-3 py-3 text-right text-slate-700">
+                    {formatNumber(row.invoices_count)}
+                  </td>
+                  <td className="px-3 py-3 text-right text-slate-700">
+                    {formatNumber(row.payments_count)}
+                  </td>
+                  <td className="px-3 py-3 text-slate-700">
+                    {formatDate(row.last_payment_date)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-slate-300 bg-slate-50">
+                <td className="px-3 py-3 font-bold text-slate-900">Total</td>
+                <td className="px-3 py-3 text-right font-bold text-slate-900">
+                  {formatMoney(totals.invoiced_amount)}
+                </td>
+                <td className="px-3 py-3 text-right font-bold text-slate-900">
+                  {formatMoney(totals.paid_amount)}
+                </td>
+                <td
+                  className={`px-3 py-3 text-right font-bold ${getBalanceClass(
+                    totals.balance_amount
+                  )}`}
+                >
+                  {formatMoney(totals.balance_amount)}
+                </td>
+                <td className="px-3 py-3 text-right font-bold text-slate-900">
+                  {formatNumber(totals.invoices_count)}
+                </td>
+                <td className="px-3 py-3 text-right font-bold text-slate-900">
+                  {formatNumber(totals.payments_count)}
+                </td>
+                <td className="px-3 py-3 font-bold text-slate-900">
+                  {formatNumber(totals.total_customers)} client(s)
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TimelineChart({
   title,
   rows,
@@ -826,6 +958,10 @@ export default function DashboardPage() {
   }
 
   const stats = overviewData?.global_stats || {};
+  const customerBalanceBoard = overviewData?.customer_balance_board || {
+    rows: [],
+    totals: {}
+  };
   const commercialSummary = commercialData?.summary || {};
   const accountingStats = accountingData?.accounting_global_stats || {};
   const accountingHealth = accountingData?.accounting_health || {};
@@ -1233,6 +1369,8 @@ export default function DashboardPage() {
               ]}
             />
           </div>
+
+          <CustomerBalanceBoardTable board={customerBalanceBoard} />
         </div>
       ) : null}
 
