@@ -256,6 +256,96 @@ const reportConfigs = {
     ],
     emptyText: "Aucune dette fournisseur ouverte"
   },
+  customer_ledger: {
+    exportKey: "customer-ledger",
+    label: "Compte courant clients",
+    description:
+      "Vue bilan par client avec le total des factures, le total des paiements et la balance sur la periode choisie.",
+    endpoint: "/reports/customer-ledger",
+    buildParams: (filters) => ({
+      start_date: filters.start_date,
+      end_date: filters.end_date,
+      customer_id: filters.customer_id || undefined
+    }),
+    exportFilename: (filters) =>
+      `compte-courant-clients-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
+    summaryCards: (summary) => [
+      { title: "Clients", value: Number(summary.total_customers || 0) },
+      { title: "Nb factures", value: Number(summary.invoices_count || 0) },
+      { title: "Nb paiements", value: Number(summary.payments_count || 0) },
+      {
+        title: "Total factures",
+        value: formatMoney(summary.invoiced_amount)
+      },
+      {
+        title: "Total paiements",
+        value: formatMoney(summary.paid_amount)
+      },
+      {
+        title: "Balance",
+        value: formatMoney(summary.balance_amount)
+      }
+    ],
+    columns: [
+      { key: "business_name", label: "Client", csvValue: (row) => row.business_name },
+      { key: "city", label: "Ville", csvValue: (row) => row.city || "" },
+      {
+        key: "invoiced_amount",
+        label: "Factures",
+        render: (row) => formatMoney(row.invoiced_amount),
+        csvValue: (row) => row.invoiced_amount
+      },
+      {
+        key: "paid_amount",
+        label: "Paiements",
+        render: (row) => formatMoney(row.paid_amount),
+        csvValue: (row) => row.paid_amount
+      },
+      {
+        key: "balance_amount",
+        label: "Balance",
+        render: (row) => (
+          <span
+            className={`font-semibold ${
+              Number(row.balance_amount || 0) > 0
+                ? "text-amber-700"
+                : Number(row.balance_amount || 0) < 0
+                ? "text-emerald-700"
+                : "text-slate-700"
+            }`}
+          >
+            {formatMoney(row.balance_amount)}
+          </span>
+        ),
+        csvValue: (row) => row.balance_amount
+      },
+      {
+        key: "invoices_count",
+        label: "Nb factures",
+        render: (row) => Number(row.invoices_count || 0),
+        csvValue: (row) => Number(row.invoices_count || 0)
+      },
+      {
+        key: "payments_count",
+        label: "Nb paiements",
+        render: (row) => Number(row.payments_count || 0),
+        csvValue: (row) => Number(row.payments_count || 0)
+      },
+      {
+        key: "last_invoice_date",
+        label: "Derniere facture",
+        render: (row) => formatDate(row.last_invoice_date),
+        csvValue: (row) => formatDate(row.last_invoice_date)
+      },
+      {
+        key: "last_payment_date",
+        label: "Dernier paiement",
+        render: (row) => formatDate(row.last_payment_date),
+        csvValue: (row) => formatDate(row.last_payment_date)
+      }
+    ],
+    emptyText: "Aucun mouvement client sur cette periode"
+  },
   sales_detail: {
     exportKey: "sales-detail",
     label: "Etat commercial detaille",
@@ -708,8 +798,15 @@ const reportConfigs = {
   }
 };
 
+const visibleReportKeys = [
+  "customer_ledger",
+  "product_sales",
+  "stock_state",
+  "cash_forecast"
+];
+
 export default function ReportsPage() {
-  const [activeReport, setActiveReport] = useState("customer_aging");
+  const [activeReport, setActiveReport] = useState("customer_ledger");
   const [filters, setFilters] = useState(getInitialFilters);
   const [warehouses, setWarehouses] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -969,7 +1066,9 @@ export default function ReportsPage() {
 
       <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
         <div className="mb-5 flex flex-wrap gap-3">
-          {Object.entries(reportConfigs).map(([key, config]) => (
+          {visibleReportKeys.map((key) => {
+            const config = reportConfigs[key];
+            return (
             <button
               key={key}
               type="button"
@@ -982,7 +1081,8 @@ export default function ReportsPage() {
             >
               {config.label}
             </button>
-          ))}
+            );
+          })}
         </div>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
@@ -1057,6 +1157,55 @@ export default function ReportsPage() {
                   {sortedWarehouses.map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.name} - {warehouse.city}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : null}
+
+          {activeReport === "customer_ledger" ? (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date debut
+                </label>
+                <input
+                  type="date"
+                  name="start_date"
+                  value={filters.start_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date fin
+                </label>
+                <input
+                  type="date"
+                  name="end_date"
+                  value={filters.end_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Client
+                </label>
+                <select
+                  name="customer_id"
+                  value={filters.customer_id}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les clients</option>
+                  {sortedCustomers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.business_name}
                     </option>
                   ))}
                 </select>
@@ -1387,6 +1536,39 @@ export default function ReportsPage() {
             emptyText={activeConfig.emptyText}
           />
         )}
+
+        {!loadingReport && activeReport === "customer_ledger" ? (
+          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-sm text-slate-500">Total factures</div>
+              <div className="mt-2 text-xl font-bold text-slate-900">
+                {formatMoney(data?.summary?.invoiced_amount)}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-sm text-slate-500">Total paiements</div>
+              <div className="mt-2 text-xl font-bold text-slate-900">
+                {formatMoney(data?.summary?.paid_amount)}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-sm text-slate-500">Balance totale</div>
+              <div
+                className={`mt-2 text-xl font-bold ${
+                  Number(data?.summary?.balance_amount || 0) > 0
+                    ? "text-amber-700"
+                    : Number(data?.summary?.balance_amount || 0) < 0
+                    ? "text-emerald-700"
+                    : "text-slate-900"
+                }`}
+              >
+                {formatMoney(data?.summary?.balance_amount)}
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

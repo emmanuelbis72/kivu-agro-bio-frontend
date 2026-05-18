@@ -36,11 +36,6 @@ const primarySections = [
     title: "Pilotage",
     links: [
       { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      {
-        to: "/commercial-dashboard",
-        label: "Dashboard commercial",
-        icon: TrendingUp
-      },
       { to: "/reports", label: "Etats & exports", icon: FileSpreadsheet },
       { to: "/budget-vs-actual", label: "Budget vs realise", icon: BarChart3 },
       { to: "/monthly-close-pack", label: "Cloture mensuelle", icon: FileText }
