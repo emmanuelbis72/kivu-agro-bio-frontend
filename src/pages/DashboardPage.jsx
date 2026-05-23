@@ -55,6 +55,30 @@ function formatDateTime(value) {
   }).format(new Date(value));
 }
 
+function formatChartPeriodLabel(row) {
+  const period = String(row?.period || "").trim();
+  const half = Number(row?.period_half || 0);
+  const month = String(row?.month_period || period.split("-H")[0] || "").trim();
+  const shortMonth = month.match(/^\d{4}-(\d{2})$/)?.[1];
+  const periodHalf = half || Number(period.match(/-H([12])$/)?.[1] || 0);
+
+  if (shortMonth && periodHalf) {
+    return `${shortMonth}/${periodHalf}`;
+  }
+
+  return period;
+}
+
+function formatChartPeriodTitle(row) {
+  const label = formatChartPeriodLabel(row);
+
+  if (row?.period_start && row?.period_end) {
+    return `${label} (${formatDate(row.period_start)} - ${formatDate(row.period_end)})`;
+  }
+
+  return row?.period || label;
+}
+
 function getDefaultFilters() {
   const endDate = new Date();
   const startDate = new Date();
@@ -461,7 +485,7 @@ function MultiSeriesLineChart({
                       fill={item.color}
                     >
                       <title>
-                        {`${item.label} | ${row.period} : ${valueFormatter(row[item.key])}`}
+                        {`${item.label} | ${formatChartPeriodTitle(row)} : ${valueFormatter(row[item.key])}`}
                       </title>
                     </circle>
                   ))
@@ -473,10 +497,11 @@ function MultiSeriesLineChart({
                     x={getX(index)}
                     y={height - 12}
                     textAnchor="middle"
-                    fontSize="11"
-                    fill="#64748B"
+                    fontSize="12"
+                    fontWeight="600"
+                    fill="#475569"
                   >
-                    {row.period}
+                    {formatChartPeriodLabel(row)}
                   </text>
                 ))}
               </svg>
@@ -781,7 +806,9 @@ function TimelineChart({
                     />
                   </div>
 
-                  <div className="text-center text-xs text-slate-500">{row.period}</div>
+                  <div className="text-center text-xs font-semibold text-slate-600">
+                    {formatChartPeriodLabel(row)}
+                  </div>
                 </div>
               );
             })}
@@ -1009,11 +1036,23 @@ export default function DashboardPage() {
 
     rows.forEach((row) => {
       if (!salesPeriodMap.has(row.period)) {
-        salesPeriodMap.set(row.period, { period: row.period });
+        salesPeriodMap.set(row.period, {
+          period: row.period,
+          month_period: row.month_period,
+          period_half: row.period_half,
+          period_start: row.period_start,
+          period_end: row.period_end
+        });
       }
 
       if (!paymentPeriodMap.has(row.period)) {
-        paymentPeriodMap.set(row.period, { period: row.period });
+        paymentPeriodMap.set(row.period, {
+          period: row.period,
+          month_period: row.month_period,
+          period_half: row.period_half,
+          period_start: row.period_start,
+          period_end: row.period_end
+        });
       }
 
       const salesTarget = salesPeriodMap.get(row.period);
