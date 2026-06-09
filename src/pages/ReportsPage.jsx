@@ -744,6 +744,18 @@ const reportConfigs = {
         value: formatMoney(summary.current_cash_base)
       },
       {
+        title: "Caisse",
+        value: formatMoney(summary.cash_on_hand_base)
+      },
+      {
+        title: "Banque",
+        value: formatMoney(summary.bank_base)
+      },
+      {
+        title: "Mobile money",
+        value: formatMoney(summary.mobile_money_base)
+      },
+      {
         title: "Creances ouvertes",
         value: formatMoney(summary.open_receivables)
       },

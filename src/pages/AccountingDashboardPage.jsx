@@ -3,6 +3,7 @@ import api from "../api/axios";
 import SectionTitle from "../components/ui/SectionTitle";
 import StatCard from "../components/ui/StatCard";
 import TableCard from "../components/ui/TableCard";
+import TreasuryBreakdown from "../components/ui/TreasuryBreakdown";
 
 function formatMoney(value) {
   return new Intl.NumberFormat("fr-FR", {
@@ -242,7 +243,15 @@ export default function AccountingDashboardPage() {
         <StatCard
           title="Base cash observee"
           value={formatMoney(cashSummary.current_cash_base)}
-          subtitle="Paiements clients - paiements fournisseurs - depenses"
+          subtitle={
+            <TreasuryBreakdown
+              cashOnHand={cashSummary.cash_on_hand_base}
+              bank={cashSummary.bank_base}
+              mobileMoney={cashSummary.mobile_money_base}
+              other={cashSummary.other_treasury_base}
+              header="Paiements clients - paiements fournisseurs - depenses"
+            />
+          }
         />
         <StatCard
           title="Creances ouvertes"

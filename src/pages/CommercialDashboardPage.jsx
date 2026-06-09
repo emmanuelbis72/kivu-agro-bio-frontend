@@ -1,8 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../api/axios";
 import SectionTitle from "../components/ui/SectionTitle";
 import StatCard from "../components/ui/StatCard";
 import TableCard from "../components/ui/TableCard";
+import ProductCityHeatmap from "../components/ui/ProductCityHeatmap";
+import CommercialHeatmapFilterPanel from "../components/ui/CommercialHeatmapFilterPanel";
+import {
+  buildAlphabeticalOptions,
+  buildCommercialHeatmapQueryParams,
+  getDefaultCommercialHeatmapFilters
+} from "../utils/commercialHeatmap";
 
 function formatMoney(value) {
   return new Intl.NumberFormat("fr-FR", {
@@ -43,6 +50,14 @@ function formatDate(value) {
 function formatDays(value) {
   const days = Number(value || 0);
   return `${days} j`;
+}
+
+function resolveOptionLabel(options, value, emptyLabel) {
+  if (!value) {
+    return emptyLabel;
+  }
+
+  return options.find((option) => String(option.value) === String(value))?.label || String(value);
 }
 
 function HorizontalBarList({
@@ -111,15 +126,46 @@ const periodOptions = [
 
 export default function CommercialDashboardPage() {
   const [days, setDays] = useState("365");
+  const [heatmapFilters, setHeatmapFilters] = useState(() =>
+    getDefaultCommercialHeatmapFilters({
+      periodDays: "365",
+      topProducts: "10",
+      topCities: "10"
+    })
+  );
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [heatmapRefreshing, setHeatmapRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  async function fetchDashboard(periodDays = days, isRefresh = false) {
+  function buildCommercialOverviewPath(
+    periodDays = days,
+    nextHeatmapFilters = heatmapFilters
+  ) {
+    const params = new URLSearchParams();
+    params.set("days", String(periodDays));
+    params.set("top_limit", "10");
+
+    buildCommercialHeatmapQueryParams(nextHeatmapFilters).forEach(
+      (value, key) => {
+        params.set(key, value);
+      }
+    );
+
+    return `/dashboard/commercial-overview?${params.toString()}`;
+  }
+
+  async function fetchDashboard(
+    periodDays = days,
+    nextHeatmapFilters = heatmapFilters,
+    mode = "load"
+  ) {
     try {
-      if (isRefresh) {
+      if (mode === "page") {
         setRefreshing(true);
+      } else if (mode === "heatmap") {
+        setHeatmapRefreshing(true);
       } else {
         setLoading(true);
       }
@@ -127,7 +173,7 @@ export default function CommercialDashboardPage() {
       setError("");
 
       const response = await api.get(
-        `/dashboard/commercial-overview?days=${periodDays}&top_limit=10`
+        buildCommercialOverviewPath(periodDays, nextHeatmapFilters)
       );
       setData(response.data?.data || null);
     } catch (err) {
@@ -139,16 +185,41 @@ export default function CommercialDashboardPage() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setHeatmapRefreshing(false);
     }
   }
 
   useEffect(() => {
-    fetchDashboard(days);
+    fetchDashboard(days, heatmapFilters);
   }, []);
 
   async function handleSubmit(event) {
     event.preventDefault();
-    await fetchDashboard(days, true);
+    await fetchDashboard(days, heatmapFilters, "page");
+  }
+
+  function handleHeatmapFilterChange(event) {
+    const { name, value } = event.target;
+    setHeatmapFilters((current) => ({
+      ...current,
+      [name]: value
+    }));
+  }
+
+  async function handleHeatmapSubmit(event) {
+    event.preventDefault();
+    await fetchDashboard(days, heatmapFilters, "heatmap");
+  }
+
+  async function handleHeatmapReset() {
+    const defaults = getDefaultCommercialHeatmapFilters({
+      periodDays: days,
+      topProducts: "10",
+      topCities: "10"
+    });
+
+    setHeatmapFilters(defaults);
+    await fetchDashboard(days, defaults, "heatmap");
   }
 
   if (loading) {
@@ -168,14 +239,105 @@ export default function CommercialDashboardPage() {
   }
 
   const summary = data?.summary || {};
+  const performanceHighlights = data?.performance_highlights || {};
   const monthlyTrend = data?.monthly_trend || [];
   const salesByCity = data?.sales_by_city || [];
   const salesByWarehouse = data?.sales_by_warehouse || [];
+  const salesByChain = data?.sales_by_chain || [];
+  const salesByChannel = data?.sales_by_channel || [];
   const salesByCustomer = data?.sales_by_customer || [];
   const salesByProduct = data?.sales_by_product || [];
+  const productCityHeatmap = data?.product_city_heatmap || {
+    products: [],
+    cities: [],
+    cells: [],
+    best_pairs: []
+  };
   const decliningProducts = data?.declining_products || [];
   const dormantClients = data?.dormant_clients || [];
   const reactivationCandidates = data?.reactivation_candidates || [];
+  const warehouseOptions = useMemo(
+    () => buildAlphabeticalOptions(salesByWarehouse, "warehouse_id", "warehouse_name"),
+    [salesByWarehouse]
+  );
+  const chainOptions = useMemo(
+    () => buildAlphabeticalOptions(salesByChain, "chain_name"),
+    [salesByChain]
+  );
+  const channelOptions = useMemo(
+    () => buildAlphabeticalOptions(salesByChannel, "sales_channel"),
+    [salesByChannel]
+  );
+  const heatmapFilterSummary = useMemo(
+    () => ({
+      periodLabel:
+        periodOptions.find((option) => option.value === String(heatmapFilters.days))
+          ?.label || `${heatmapFilters.days} jours`,
+      warehouseLabel: resolveOptionLabel(
+        warehouseOptions,
+        heatmapFilters.warehouse_id,
+        "Tous les depots"
+      ),
+      chainLabel: resolveOptionLabel(
+        chainOptions,
+        heatmapFilters.chain_name,
+        "Toutes les chaines"
+      ),
+      channelLabel: resolveOptionLabel(
+        channelOptions,
+        heatmapFilters.sales_channel,
+        "Tous les canaux"
+      )
+    }),
+    [channelOptions, chainOptions, heatmapFilters, warehouseOptions]
+  );
+  const terrainHighlights = [
+    {
+      title: "Ville leader",
+      value: performanceHighlights.top_city?.city || "-",
+      subtitle: performanceHighlights.top_city
+        ? formatMoney(performanceHighlights.top_city.total_sales_amount)
+        : "Aucune ville dominante"
+    },
+    {
+      title: "Chaine leader",
+      value: performanceHighlights.top_chain?.chain_name || "-",
+      subtitle: performanceHighlights.top_chain
+        ? formatMoney(performanceHighlights.top_chain.total_sales_amount)
+        : "Aucune chaine dominante"
+    },
+    {
+      title: "Canal leader",
+      value: performanceHighlights.top_channel?.sales_channel || "-",
+      subtitle: performanceHighlights.top_channel
+        ? formatMoney(performanceHighlights.top_channel.total_sales_amount)
+        : "Aucun canal dominant"
+    },
+    {
+      title: "Client leader",
+      value: performanceHighlights.top_customer?.business_name || "-",
+      subtitle: performanceHighlights.top_customer
+        ? formatMoney(performanceHighlights.top_customer.total_sales_amount)
+        : "Aucun client moteur"
+    },
+    {
+      title: "Produit moteur",
+      value:
+        performanceHighlights.top_product_by_profit?.product_name ||
+        performanceHighlights.top_product_by_sales?.product_name ||
+        "-",
+      subtitle:
+        performanceHighlights.top_product_by_profit ||
+        performanceHighlights.top_product_by_sales
+          ? formatMoney(
+              (
+                performanceHighlights.top_product_by_profit ||
+                performanceHighlights.top_product_by_sales
+              ).gross_profit_amount
+            )
+          : "Aucun produit moteur"
+    }
+  ];
 
   return (
     <div className="space-y-8">
@@ -236,7 +398,7 @@ export default function CommercialDashboardPage() {
         </form>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
         <StatCard
           title="Ventes facturees"
           value={formatMoney(summary.total_sales_amount)}
@@ -248,15 +410,38 @@ export default function CommercialDashboardPage() {
           subtitle={`Marge ${formatPercent(summary.gross_margin_percent)}`}
         />
         <StatCard
-          title="Clients actifs"
-          value={Number(summary.active_customers || 0)}
-          subtitle={`${Number(summary.active_cities || 0)} ville(s) active(s)`}
+          title="Encaissements clients"
+          value={formatMoney(summary.total_collected_amount)}
+          subtitle={`${Number(summary.active_customers || 0)} client(s) actif(s)`}
         />
         <StatCard
           title="Creances clients"
           value={formatMoney(summary.total_receivables)}
-          subtitle={formatMoney(summary.total_collected_amount)}
+          subtitle={`${Number(summary.active_cities || 0)} ville(s) active(s)`}
         />
+        <StatCard
+          title="Chaines actives"
+          value={Number(summary.active_chains || 0)}
+          subtitle={`${Number(summary.active_warehouses || 0)} depot(s) actifs`}
+        />
+        <StatCard
+          title="Canaux actifs"
+          value={Number(summary.active_channels || 0)}
+          subtitle="Vue terrain multi-canal"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
+        {terrainHighlights.map((item) => (
+          <div
+            key={item.title}
+            className="rounded-3xl border border-slate-100 bg-white p-5 shadow-soft"
+          >
+            <div className="text-sm font-semibold text-slate-600">{item.title}</div>
+            <div className="mt-3 text-2xl font-bold text-slate-900">{item.value}</div>
+            <div className="mt-2 text-sm text-slate-500">{item.subtitle}</div>
+          </div>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -272,6 +457,30 @@ export default function CommercialDashboardPage() {
         />
 
         <HorizontalBarList
+          title="Ventes par chaine"
+          rows={salesByChain}
+          labelKey="chain_name"
+          subtitleKey="total_customers"
+          valueKey="total_sales_amount"
+          colorClass="bg-brand-500"
+          valueFormatter={formatMoney}
+          emptyText="Aucune chaine analysee"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <HorizontalBarList
+          title="Ventes par canal"
+          rows={salesByChannel}
+          labelKey="sales_channel"
+          subtitleKey="total_customers"
+          valueKey="total_sales_amount"
+          colorClass="bg-amber-500"
+          valueFormatter={formatMoney}
+          emptyText="Aucun canal analyse"
+        />
+
+        <HorizontalBarList
           title="Top produits par chiffre d'affaires"
           rows={salesByProduct}
           labelKey="product_name"
@@ -280,6 +489,30 @@ export default function CommercialDashboardPage() {
           colorClass="bg-brand-500"
           valueFormatter={formatMoney}
           emptyText="Aucun produit facture"
+        />
+      </div>
+
+      <div className="space-y-4">
+        <CommercialHeatmapFilterPanel
+          values={heatmapFilters}
+          onChange={handleHeatmapFilterChange}
+          onSubmit={handleHeatmapSubmit}
+          onReset={handleHeatmapReset}
+          warehouseOptions={warehouseOptions}
+          chainOptions={chainOptions}
+          channelOptions={channelOptions}
+          loading={heatmapRefreshing}
+        />
+
+        <ProductCityHeatmap
+          title="Heatmap produit x ville"
+          subtitle="Lecture visuelle des villes les plus fortes pour chaque produit, avec bascule entre CA, quantite, profit brut et marge."
+          data={productCityHeatmap}
+          filterSummary={heatmapFilterSummary}
+          formatMoney={formatMoney}
+          formatNumber={formatNumber}
+          formatPercent={formatPercent}
+          emptyText="Aucune matrice produit x ville disponible"
         />
       </div>
 
@@ -338,20 +571,27 @@ export default function CommercialDashboardPage() {
           emptyText="Aucun client facture"
           columns={[
             { key: "business_name", label: "Client" },
+            { key: "chain_name", label: "Chaine" },
+            { key: "sales_channel", label: "Canal" },
             { key: "city", label: "Ville" },
             {
               key: "last_invoice_date",
               label: "Derniere facture",
               render: (row) => formatDate(row.last_invoice_date)
             },
-            {
-              key: "total_sales_amount",
-              label: "Ventes",
-              render: (row) => formatMoney(row.total_sales_amount)
-            },
-            {
-              key: "gross_profit_amount",
-              label: "Profit brut",
+                {
+                  key: "total_sales_amount",
+                  label: "Ventes",
+                  render: (row) => formatMoney(row.total_sales_amount)
+                },
+                {
+                  key: "collection_rate_percent",
+                  label: "Tx enc.",
+                  render: (row) => formatPercent(row.collection_rate_percent)
+                },
+                {
+                  key: "gross_profit_amount",
+                  label: "Profit brut",
               render: (row) => formatMoney(row.gross_profit_amount)
             },
             {
@@ -425,6 +665,8 @@ export default function CommercialDashboardPage() {
           emptyText="Aucun client dormant"
           columns={[
             { key: "business_name", label: "Client" },
+            { key: "chain_name", label: "Chaine" },
+            { key: "sales_channel", label: "Canal" },
             { key: "city", label: "Ville" },
             {
               key: "last_invoice_date",
@@ -451,6 +693,8 @@ export default function CommercialDashboardPage() {
         emptyText="Aucun client prioritaire a reactiver"
         columns={[
           { key: "business_name", label: "Client" },
+          { key: "chain_name", label: "Chaine" },
+          { key: "sales_channel", label: "Canal" },
           { key: "city", label: "Ville" },
           {
             key: "last_invoice_date",

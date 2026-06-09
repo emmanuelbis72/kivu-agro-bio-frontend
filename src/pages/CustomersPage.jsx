@@ -11,6 +11,8 @@ const initialForm = {
   phone: "",
   email: "",
   city: "",
+  chain_name: "",
+  sales_channel: "",
   address: "",
   payment_terms_days: "",
   credit_limit: "",
@@ -26,6 +28,8 @@ function normalizeForm(form) {
     phone: form.phone.trim(),
     email: form.email.trim(),
     city: form.city.trim(),
+    chain_name: form.chain_name.trim(),
+    sales_channel: form.sales_channel.trim(),
     address: form.address.trim(),
     payment_terms_days:
       form.payment_terms_days === "" ? 0 : Number(form.payment_terms_days),
@@ -100,6 +104,8 @@ export default function CustomersPage() {
       phone: customer.phone || "",
       email: customer.email || "",
       city: customer.city || "",
+      chain_name: customer.chain_name || "",
+      sales_channel: customer.sales_channel || "",
       address: customer.address || "",
       payment_terms_days: customer.payment_terms_days ?? "",
       credit_limit: customer.credit_limit ?? "",
@@ -196,6 +202,8 @@ export default function CustomersPage() {
         customer.phone,
         customer.email,
         customer.city,
+        customer.chain_name,
+        customer.sales_channel,
         customer.address,
         customer.customer_type
       ]
@@ -313,6 +321,40 @@ export default function CustomersPage() {
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
               placeholder="Kinshasa"
             />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Chaine / reseau
+            </label>
+            <input
+              name="chain_name"
+              value={form.chain_name}
+              onChange={handleChange}
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+              placeholder="Ex: GG MART, CARREFOUR, SWISSMART"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Canal commercial
+            </label>
+            <select
+              name="sales_channel"
+              value={form.sales_channel}
+              onChange={handleChange}
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+            >
+              <option value="">Deduction automatique</option>
+              <option value="Supermarches">Supermarches</option>
+              <option value="Pharmacies">Pharmacies</option>
+              <option value="Distribution B2B">Distribution B2B</option>
+              <option value="Vente directe">Vente directe</option>
+              <option value="Livraison">Livraison</option>
+              <option value="WhatsApp">WhatsApp</option>
+              <option value="Site web">Site web</option>
+            </select>
           </div>
 
           <div>
@@ -437,8 +479,9 @@ export default function CustomersPage() {
               columns={[
                 { key: "business_name", label: "Client" },
                 { key: "customer_type", label: "Type" },
+                { key: "chain_name", label: "Chaine" },
+                { key: "sales_channel", label: "Canal" },
                 { key: "city", label: "Ville" },
-                { key: "phone", label: "Téléphone" },
                 {
                   key: "credit_limit",
                   label: "Crédit",

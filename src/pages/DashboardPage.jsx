@@ -3,6 +3,14 @@ import api from "../api/axios";
 import SectionTitle from "../components/ui/SectionTitle";
 import StatCard from "../components/ui/StatCard";
 import TableCard from "../components/ui/TableCard";
+import ProductCityHeatmap from "../components/ui/ProductCityHeatmap";
+import CommercialHeatmapFilterPanel from "../components/ui/CommercialHeatmapFilterPanel";
+import TreasuryBreakdown from "../components/ui/TreasuryBreakdown";
+import {
+  buildAlphabeticalOptions,
+  buildCommercialHeatmapQueryParams,
+  getDefaultCommercialHeatmapFilters
+} from "../utils/commercialHeatmap";
 
 function formatMoney(value) {
   return new Intl.NumberFormat("fr-FR", {
@@ -55,6 +63,36 @@ function formatDateTime(value) {
   }).format(new Date(value));
 }
 
+function formatPeriodRange(startValue, endValue) {
+  if (!startValue && !endValue) {
+    return "-";
+  }
+
+  if (startValue && endValue && startValue === endValue) {
+    return formatDate(startValue);
+  }
+
+  return `${formatDate(startValue)} - ${formatDate(endValue)}`;
+}
+
+function formatSignedMoney(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "n.d.";
+  }
+
+  const numericValue = Number(value);
+  return `${numericValue > 0 ? "+" : ""}${formatMoney(numericValue)}`;
+}
+
+function formatSignedPercent(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "n.d.";
+  }
+
+  const numericValue = Number(value);
+  return `${numericValue > 0 ? "+" : ""}${numericValue.toFixed(1)} %`;
+}
+
 function formatChartPeriodLabel(row) {
   const period = String(row?.period || "").trim();
   const half = Number(row?.period_half || 0);
@@ -77,6 +115,14 @@ function formatChartPeriodTitle(row) {
   }
 
   return row?.period || label;
+}
+
+function resolveOptionLabel(options, value, emptyLabel) {
+  if (!value) {
+    return emptyLabel;
+  }
+
+  return options.find((option) => String(option.value) === String(value))?.label || String(value);
 }
 
 function getDefaultFilters() {
@@ -261,6 +307,281 @@ function SignalCard({ title, value, subtitle, tone = "slate" }) {
       {subtitle ? (
         <div className="mt-2 text-sm leading-6 opacity-90">{subtitle}</div>
       ) : null}
+    </div>
+  );
+}
+
+function DeltaBadge({ value, formatter = formatSignedPercent }) {
+  const numericValue = Number(value);
+  const isValid =
+    value !== null && value !== undefined && Number.isFinite(numericValue);
+  const badgeClass = !isValid
+    ? "bg-slate-100 text-slate-600"
+    : numericValue > 0
+    ? "bg-emerald-100 text-emerald-700"
+    : numericValue < 0
+    ? "bg-red-100 text-red-700"
+    : "bg-slate-100 text-slate-600";
+
+  return (
+    <span
+      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}
+    >
+      {isValid ? formatter(numericValue) : "n.d."}
+    </span>
+  );
+}
+
+function ExecutiveMetricCell({ label, value }) {
+  return (
+    <div className="rounded-2xl bg-white/80 px-4 py-3 shadow-sm ring-1 ring-slate-100">
+      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </div>
+      <div className="mt-2 text-base font-bold text-slate-900">{value}</div>
+    </div>
+  );
+}
+
+function ExecutivePeriodCard({ title, period, tone = "slate" }) {
+  const toneClasses = {
+    brand: "border-brand-100 bg-gradient-to-br from-brand-50/70 via-white to-white",
+    emerald:
+      "border-emerald-100 bg-gradient-to-br from-emerald-50/80 via-white to-white",
+    amber: "border-amber-100 bg-gradient-to-br from-amber-50/80 via-white to-white",
+    slate: "border-slate-100 bg-gradient-to-br from-slate-50/80 via-white to-white"
+  };
+
+  const currentPeriod = period || {};
+
+  return (
+    <div
+      className={`rounded-[28px] border p-5 shadow-soft ${
+        toneClasses[tone] || toneClasses.slate
+      }`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+            {title}
+          </div>
+          <div className="mt-2 text-sm text-slate-600">
+            {formatPeriodRange(
+              currentPeriod.start_date,
+              currentPeriod.end_date
+            )}
+          </div>
+        </div>
+        <span className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm ring-1 ring-slate-100">
+          {Number(currentPeriod.total_invoices || 0)} facture(s)
+        </span>
+      </div>
+
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <ExecutiveMetricCell
+          label="Facture"
+          value={formatMoney(currentPeriod.invoiced_amount)}
+        />
+        <ExecutiveMetricCell
+          label="Encaisse"
+          value={formatMoney(currentPeriod.payments_received)}
+        />
+        <ExecutiveMetricCell
+          label="Depenses"
+          value={formatMoney(currentPeriod.expenses_amount)}
+        />
+        <ExecutiveMetricCell
+          label="Profit brut"
+          value={formatMoney(currentPeriod.gross_profit_amount)}
+        />
+        <ExecutiveMetricCell
+          label="Net estime"
+          value={formatMoney(currentPeriod.net_profit_estimate)}
+        />
+        <ExecutiveMetricCell
+          label="Marge nette"
+          value={formatPercent(currentPeriod.net_margin_percent)}
+        />
+      </div>
+
+      <div className="mt-5 flex flex-wrap gap-2 text-xs text-slate-500">
+        <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-100">
+          {Number(currentPeriod.payments_count || 0)} paiement(s)
+        </span>
+        <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-100">
+          {Number(currentPeriod.expenses_count || 0)} depense(s)
+        </span>
+        <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-100">
+          {Number(currentPeriod.span_days || 0)} jour(s)
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ExecutiveInsightCard({
+  eyebrow,
+  title,
+  value,
+  subtitle,
+  deltaValue,
+  deltaFormatter = formatSignedPercent
+}) {
+  return (
+    <div className="rounded-[28px] border border-slate-100 bg-white p-5 shadow-soft">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+            {eyebrow}
+          </div>
+          <div className="mt-2 text-base font-semibold leading-6 text-slate-900">
+            {title}
+          </div>
+        </div>
+        <DeltaBadge value={deltaValue} formatter={deltaFormatter} />
+      </div>
+
+      <div className="mt-5 text-3xl font-bold text-slate-900">{value}</div>
+      {subtitle ? (
+        <div className="mt-3 text-sm leading-6 text-slate-600">{subtitle}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function ExecutiveKpiSnapshotSection({ snapshot }) {
+  const periods = snapshot?.periods || {};
+  const comparisons = snapshot?.comparisons || {};
+  const targets = snapshot?.targets || {};
+  const forecasts = snapshot?.forecasts || {};
+  const previousMonth = comparisons.month_vs_previous_month_to_date || {};
+  const lastYear = comparisons.month_vs_same_period_last_year || {};
+  const salesForecastToDate = forecasts.sales_30d_forecast_to_date;
+  const cashForecastToDate = forecasts.cash_30d_forecast_to_date;
+
+  const insightCards = [
+    {
+      key: "previous",
+      eyebrow: "Comparatif M-1",
+      title: "Encaissements du mois vs mois precedent",
+      value: formatMoney(previousMonth.current_period?.payments_received),
+      subtitle: `Facture ${formatSignedMoney(
+        previousMonth.invoiced_delta
+      )} • Encaisse ${formatSignedMoney(previousMonth.payments_delta)}`,
+      deltaValue: previousMonth.payments_delta_percent
+    },
+    {
+      key: "last-year",
+      eyebrow: "Comparatif N-1",
+      title: "Meme periode de l annee precedente",
+      value: formatMoney(lastYear.current_period?.payments_received),
+      subtitle: `Profit net ${formatSignedMoney(
+        lastYear.net_profit_delta
+      )} • Facture ${formatSignedMoney(lastYear.invoiced_delta)}`,
+      deltaValue: lastYear.payments_delta_percent
+    },
+    {
+      key: "target",
+      eyebrow: "Objectif mensuel",
+      title: "Cadence d encaissement",
+      value: formatMoney(targets.actual_collected_to_date),
+      subtitle: `Attendu ${formatMoney(
+        targets.expected_collected_to_date
+      )} • objectif complet ${formatMoney(targets.monthly_revenue_target)}`,
+      deltaValue: targets.collected_gap_to_target,
+      deltaFormatter: formatSignedMoney
+    },
+    {
+      key: "forecast",
+      eyebrow: "Prevision IA",
+      title: "Projection cash et ventes a date",
+      value:
+        cashForecastToDate === null || cashForecastToDate === undefined
+          ? "n.d."
+          : formatMoney(cashForecastToDate),
+      subtitle: `Cash reel ${formatMoney(
+        forecasts.actual_cash_to_date
+      )} • ventes vs IA ${
+        salesForecastToDate === null || salesForecastToDate === undefined
+          ? "n.d."
+          : formatSignedMoney(forecasts.sales_gap_to_forecast)
+      }`,
+      deltaValue: forecasts.cash_gap_to_forecast,
+      deltaFormatter: formatSignedMoney
+    }
+  ];
+
+  return (
+    <div className="rounded-[30px] border border-slate-100 bg-white p-6 shadow-soft">
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+        <div className="max-w-3xl">
+          <div className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
+            Cockpit DG
+          </div>
+          <div className="mt-3 text-2xl font-bold text-slate-900">
+            Synthese jour, semaine et mois avec objectif et projection IA
+          </div>
+          <div className="mt-3 text-sm leading-7 text-slate-600">
+            Lecture prioritaire pour arbitrer le cash, le recouvrement, les
+            depenses et l avance du mois sans quitter la vue direction.
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:min-w-[360px]">
+          <SignalCard
+            title="Tresorerie disponible"
+            value={formatMoney(snapshot?.current_cash_base)}
+            subtitle={
+              <TreasuryBreakdown
+                cashOnHand={snapshot?.cash_on_hand_base}
+                bank={snapshot?.bank_base}
+                mobileMoney={snapshot?.mobile_money_base}
+                other={snapshot?.other_treasury_base}
+                header={`Photo au ${formatDateTime(snapshot?.as_of_date)}`}
+              />
+            }
+            tone="green"
+          />
+          <SignalCard
+            title="Creances ouvertes"
+            value={formatMoney(snapshot?.open_receivables)}
+            subtitle="Factures encore a encaisser"
+            tone="amber"
+          />
+          <SignalCard
+            title="Dettes ouvertes"
+            value={formatMoney(snapshot?.open_payables)}
+            subtitle="Decaissements fournisseurs a couvrir"
+            tone="red"
+          />
+          <SignalCard
+            title="Progression du mois"
+            value={formatPercent(targets.month_progress_percent)}
+            subtitle={targets.target_label || "Cadence du mois en cours"}
+            tone="blue"
+          />
+        </div>
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <ExecutivePeriodCard title="Aujourd hui" period={periods.day} tone="brand" />
+        <ExecutivePeriodCard title="Semaine" period={periods.week} tone="emerald" />
+        <ExecutivePeriodCard title="Mois" period={periods.month} tone="amber" />
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+        {insightCards.map((card) => (
+          <ExecutiveInsightCard
+            key={card.key}
+            eyebrow={card.eyebrow}
+            title={card.title}
+            value={card.value}
+            subtitle={card.subtitle}
+            deltaValue={card.deltaValue}
+            deltaFormatter={card.deltaFormatter}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -834,15 +1155,42 @@ export default function DashboardPage() {
   const [products, setProducts] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [filters, setFilters] = useState(getDefaultFilters);
+  const [heatmapFilters, setHeatmapFilters] = useState(() =>
+    getDefaultCommercialHeatmapFilters({
+      periodDays: "365",
+      topProducts: "8",
+      topCities: "8"
+    })
+  );
   const [activeTab, setActiveTab] = useState("direction");
   const [loading, setLoading] = useState(true);
   const [reportLoading, setReportLoading] = useState(false);
+  const [commercialRefreshing, setCommercialRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  async function fetchContextData() {
+  function buildCommercialOverviewPath(nextHeatmapFilters = heatmapFilters) {
+    const params = new URLSearchParams();
+    params.set("days", "365");
+    params.set("top_limit", "8");
+
+    buildCommercialHeatmapQueryParams(nextHeatmapFilters).forEach(
+      (value, key) => {
+        params.set(key, value);
+      }
+    );
+
+    return `/dashboard/commercial-overview?${params.toString()}`;
+  }
+
+  async function fetchCommercialOverview(nextHeatmapFilters = heatmapFilters) {
+    const response = await api.get(buildCommercialOverviewPath(nextHeatmapFilters));
+    setCommercialData(response.data?.data || null);
+  }
+
+  async function fetchContextData(currentHeatmapFilters = heatmapFilters) {
     const results = await Promise.allSettled([
       api.get("/dashboard/overview?top_limit=8&recent_limit=8"),
-      api.get("/dashboard/commercial-overview?days=365&top_limit=8"),
+      api.get(buildCommercialOverviewPath(currentHeatmapFilters)),
       api.get("/dashboard/accounting-overview?recent_limit=8"),
       api.get("/products"),
       api.get("/warehouses")
@@ -914,13 +1262,16 @@ export default function DashboardPage() {
     setVariationData(response.data?.data || null);
   }
 
-  async function fetchDashboard(initialFilters = filters) {
+  async function fetchDashboard(
+    initialFilters = filters,
+    currentHeatmapFilters = heatmapFilters
+  ) {
     try {
       setLoading(true);
       setError("");
 
       const [contextErrors, variationResult] = await Promise.all([
-        fetchContextData(),
+        fetchContextData(currentHeatmapFilters),
         fetchStockVariationReport(initialFilters)
           .then(() => ({ ok: true }))
           .catch((err) => ({ ok: false, err }))
@@ -984,12 +1335,122 @@ export default function DashboardPage() {
     }));
   }
 
+  function handleHeatmapFilterChange(event) {
+    const { name, value } = event.target;
+    setHeatmapFilters((current) => ({
+      ...current,
+      [name]: value
+    }));
+  }
+
+  async function handleHeatmapSubmit(event) {
+    event.preventDefault();
+
+    try {
+      setCommercialRefreshing(true);
+      setError("");
+      await fetchCommercialOverview(heatmapFilters);
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de rafraichir la heatmap commerciale."
+      );
+    } finally {
+      setCommercialRefreshing(false);
+    }
+  }
+
+  async function handleHeatmapReset() {
+    const defaults = getDefaultCommercialHeatmapFilters({
+      periodDays: "365",
+      topProducts: "8",
+      topCities: "8"
+    });
+
+    setHeatmapFilters(defaults);
+
+    try {
+      setCommercialRefreshing(true);
+      setError("");
+      await fetchCommercialOverview(defaults);
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de reinitialiser la heatmap commerciale."
+      );
+    } finally {
+      setCommercialRefreshing(false);
+    }
+  }
+
   const stats = overviewData?.global_stats || {};
+  const executiveSnapshot = overviewData?.executive_kpi_snapshot || {};
   const customerBalanceBoard = overviewData?.customer_balance_board || {
     rows: [],
     totals: {}
   };
   const commercialSummary = commercialData?.summary || {};
+  const commercialHighlights = commercialData?.performance_highlights || {};
+  const commercialCities = commercialData?.sales_by_city || [];
+  const commercialWarehouses = commercialData?.sales_by_warehouse || [];
+  const commercialChains = commercialData?.sales_by_chain || [];
+  const commercialChannels = commercialData?.sales_by_channel || [];
+  const commercialCustomers = commercialData?.sales_by_customer || [];
+  const commercialProducts = commercialData?.sales_by_product || [];
+  const productCityHeatmap = commercialData?.product_city_heatmap || {
+    products: [],
+    cities: [],
+    cells: [],
+    best_pairs: []
+  };
+  const decliningProducts = commercialData?.declining_products || [];
+  const reactivationCandidates = commercialData?.reactivation_candidates || [];
+  const heatmapWarehouseOptions = useMemo(
+    () => buildAlphabeticalOptions(warehouses, "id", "name"),
+    [warehouses]
+  );
+  const heatmapChainOptions = useMemo(
+    () => buildAlphabeticalOptions(commercialChains, "chain_name"),
+    [commercialChains]
+  );
+  const heatmapChannelOptions = useMemo(
+    () => buildAlphabeticalOptions(commercialChannels, "sales_channel"),
+    [commercialChannels]
+  );
+  const heatmapFilterSummary = useMemo(
+    () => ({
+      periodLabel:
+        ({
+          "30": "30 jours",
+          "90": "90 jours",
+          "180": "180 jours",
+          "365": "12 mois"
+        }[String(heatmapFilters.days)] || `${heatmapFilters.days} jours`),
+      warehouseLabel: resolveOptionLabel(
+        heatmapWarehouseOptions,
+        heatmapFilters.warehouse_id,
+        "Tous les depots"
+      ),
+      chainLabel: resolveOptionLabel(
+        heatmapChainOptions,
+        heatmapFilters.chain_name,
+        "Toutes les chaines"
+      ),
+      channelLabel: resolveOptionLabel(
+        heatmapChannelOptions,
+        heatmapFilters.sales_channel,
+        "Tous les canaux"
+      )
+    }),
+    [
+      heatmapChainOptions,
+      heatmapChannelOptions,
+      heatmapFilters,
+      heatmapWarehouseOptions
+    ]
+  );
   const accountingStats = accountingData?.accounting_global_stats || {};
   const accountingHealth = accountingData?.accounting_health || {};
   const cashSummary = accountingData?.cash_forecast?.summary || {};
@@ -1012,6 +1473,77 @@ export default function DashboardPage() {
   );
   const topPayingCustomers = commercialData?.top_paying_customers || [];
   const mostProfitableProducts = commercialData?.most_profitable_products || [];
+  const commercialLeaderSignals = useMemo(
+    () => [
+      {
+        title: "Ville leader",
+        value: commercialHighlights.top_city?.city || "-",
+        tone: "green",
+        subtitle: commercialHighlights.top_city
+          ? `${formatMoney(
+              commercialHighlights.top_city.total_sales_amount
+            )} facture • ${formatPercent(
+              commercialHighlights.top_city.collection_rate_percent
+            )} encaisse`
+          : "Aucune ville dominante"
+      },
+      {
+        title: "Chaine leader",
+        value: commercialHighlights.top_chain?.chain_name || "-",
+        tone: "blue",
+        subtitle: commercialHighlights.top_chain
+          ? `${formatMoney(
+              commercialHighlights.top_chain.total_sales_amount
+            )} facture • ${Number(
+              commercialHighlights.top_chain.total_customers || 0
+            )} point(s)`
+          : "Aucune chaine dominante"
+      },
+      {
+        title: "Canal leader",
+        value: commercialHighlights.top_channel?.sales_channel || "-",
+        tone: "amber",
+        subtitle: commercialHighlights.top_channel
+          ? `${formatMoney(
+              commercialHighlights.top_channel.total_sales_amount
+            )} facture • marge ${formatPercent(
+              commercialHighlights.top_channel.gross_margin_percent
+            )}`
+          : "Aucun canal dominant"
+      },
+      {
+        title: "Client leader",
+        value: commercialHighlights.top_customer?.business_name || "-",
+        tone: "slate",
+        subtitle: commercialHighlights.top_customer
+          ? `${formatMoney(
+              commercialHighlights.top_customer.total_sales_amount
+            )} facture • ${formatMoney(
+              commercialHighlights.top_customer.total_collected_amount
+            )} encaisse`
+          : "Aucun client moteur"
+      },
+      {
+        title: "Produit moteur",
+        value:
+          commercialHighlights.top_product_by_profit?.product_name ||
+          commercialHighlights.top_product_by_sales?.product_name ||
+          "-",
+        tone: "green",
+        subtitle:
+          commercialHighlights.top_product_by_profit ||
+          commercialHighlights.top_product_by_sales
+            ? `${formatMoney(
+                (
+                  commercialHighlights.top_product_by_profit ||
+                  commercialHighlights.top_product_by_sales
+                ).gross_profit_amount
+              )} de profit brut`
+            : "Aucun produit dominant"
+      }
+    ],
+    [commercialHighlights]
+  );
   const clientSalesTrend = useMemo(() => {
     const rows = commercialData?.customer_monthly_trend || [];
 
@@ -1248,6 +1780,8 @@ export default function DashboardPage() {
 
       {activeTab === "direction" ? (
         <div className="space-y-8">
+          <ExecutiveKpiSnapshotSection snapshot={executiveSnapshot} />
+
           <MultiSeriesLineChart
             title="Evolution comparee factures / paiements / depenses / benefice"
             subtitle="Lecture mensuelle pour rapprocher facturation, encaissement reel, depenses engagees et profit brut."
@@ -1368,11 +1902,11 @@ export default function DashboardPage() {
 
       {activeTab === "commercial" ? (
         <div className="space-y-8">
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
             <StatCard
               title="Ventes facturees"
               value={formatMoney(commercialSummary.total_sales_amount)}
-              subtitle={`${Number(commercialSummary.total_invoices || 0)} facture(s)`}
+              subtitle={`${Number(commercialSummary.total_invoices || 0)} facture(s) sur la periode`}
             />
             <StatCard
               title="Profit brut"
@@ -1380,66 +1914,140 @@ export default function DashboardPage() {
               subtitle={`Marge ${formatPercent(commercialSummary.gross_margin_percent)}`}
             />
             <StatCard
-              title="Clients actifs"
-              value={Number(commercialSummary.active_customers || 0)}
-              subtitle={`${Number(commercialSummary.active_cities || 0)} ville(s) active(s)`}
+              title="Encaissements clients"
+              value={formatMoney(commercialSummary.total_collected_amount)}
+              subtitle={`${Number(commercialSummary.active_customers || 0)} client(s) actif(s)`}
             />
             <StatCard
               title="Creances clients"
               value={formatMoney(commercialSummary.total_receivables)}
-              subtitle={`${formatMoney(commercialSummary.total_collected_amount)} deja encaisse(s)`}
+              subtitle={`${Number(commercialSummary.active_cities || 0)} ville(s) active(s)`}
             />
+            <StatCard
+              title="Chaines actives"
+              value={Number(commercialSummary.active_chains || 0)}
+              subtitle={`${Number(commercialSummary.active_warehouses || 0)} depot(s) mobilise(s)`}
+            />
+            <StatCard
+              title="Canaux actifs"
+              value={Number(commercialSummary.active_channels || 0)}
+              subtitle="Lecture terrain multi-canal"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
+            {commercialLeaderSignals.map((signal) => (
+              <SignalCard
+                key={signal.title}
+                title={signal.title}
+                value={signal.value}
+                subtitle={signal.subtitle}
+                tone={signal.tone}
+              />
+            ))}
           </div>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <HorizontalBarChart
               title="Ventes par ville"
-              rows={commercialData?.sales_by_city || []}
+              rows={commercialCities}
               labelKey="city"
               valueKey="total_sales_amount"
-              helperText="Repere ou le chiffre d affaires se concentre reellement."
+              helperText="Repere immediat des villes qui portent le chiffre d affaires."
               colorClass="bg-emerald-500"
               valueFormatter={formatMoney}
               emptyText="Aucune vente par ville"
             />
 
             <HorizontalBarChart
+              title="Ventes par chaine"
+              rows={commercialChains}
+              labelKey="chain_name"
+              valueKey="total_sales_amount"
+              helperText="Lecture des reseaux qui concentrent le plus de chiffre d affaires."
+              colorClass="bg-brand-500"
+              valueFormatter={formatMoney}
+              emptyText="Aucune chaine analysee"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <DualMetricRankingChart
+              title="Chaines: facture vs encaisse"
+              subtitle="Comparer tout de suite les reseaux qui facturent le plus a ceux qui encaissent le mieux."
+              rows={commercialChains}
+              labelKey="chain_name"
+              primaryKey="total_sales_amount"
+              secondaryKey="total_collected_amount"
+              primaryLabel="Facture"
+              secondaryLabel="Encaisse"
+              primaryColor="bg-brand-500"
+              secondaryColor="bg-emerald-500"
+              valueFormatter={formatMoney}
+              emptyText="Aucune chaine comparee"
+            />
+
+            <DualMetricRankingChart
+              title="Canaux: profit vs creance"
+              subtitle="Voir quels canaux sont rentables et lesquels immobilisent encore du cash."
+              rows={commercialChannels}
+              labelKey="sales_channel"
+              primaryKey="gross_profit_amount"
+              secondaryKey="total_receivables"
+              primaryLabel="Profit brut"
+              secondaryLabel="Creance"
+              primaryColor="bg-emerald-500"
+              secondaryColor="bg-amber-500"
+              valueFormatter={formatMoney}
+              emptyText="Aucun canal compare"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <HorizontalBarChart
+              title="Ventes par canal"
+              rows={commercialChannels}
+              labelKey="sales_channel"
+              valueKey="total_sales_amount"
+              helperText="Comparer supermarches, pharmacies, distribution et vente directe."
+              colorClass="bg-amber-500"
+              valueFormatter={formatMoney}
+              emptyText="Aucun canal analyse"
+            />
+
+            <HorizontalBarChart
               title="Produits les plus vendus"
-              rows={commercialData?.sales_by_product || []}
+              rows={commercialProducts}
               labelKey="product_name"
               valueKey="total_quantity_sold"
-              helperText="Classement des produits qui sortent le plus en quantite sur la periode."
+              helperText="Les references qui sortent le plus en volume sur la periode."
               colorClass="bg-brand-500"
               valueFormatter={formatNumber}
               emptyText="Aucun produit facture"
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <HorizontalBarChart
-              title="Produits les plus rentables"
-              rows={mostProfitableProducts}
-              labelKey="product_name"
-              valueKey="gross_profit_amount"
-              helperText="Liste des produits qui apportent le plus de benefice brut sur la periode."
-              colorClass="bg-emerald-500"
-              valueFormatter={formatMoney}
-              emptyText="Aucun produit rentable calcule"
+          <div className="space-y-4">
+            <CommercialHeatmapFilterPanel
+              values={heatmapFilters}
+              onChange={handleHeatmapFilterChange}
+              onSubmit={handleHeatmapSubmit}
+              onReset={handleHeatmapReset}
+              warehouseOptions={heatmapWarehouseOptions}
+              chainOptions={heatmapChainOptions}
+              channelOptions={heatmapChannelOptions}
+              loading={commercialRefreshing}
             />
 
-            <DualMetricRankingChart
-              title="Qui paie le plus"
-              subtitle="Comparer rapidement les encaissements reels aux factures emises par client."
-              rows={topPayingCustomers}
-              labelKey="business_name"
-              primaryKey="total_collected_amount"
-              secondaryKey="total_receivables"
-              primaryLabel="Encaisse"
-              secondaryLabel="Reste du"
-              primaryColor="bg-emerald-500"
-              secondaryColor="bg-amber-500"
-              valueFormatter={formatMoney}
-              emptyText="Aucun encaissement client"
+            <ProductCityHeatmap
+              title="Heatmap produit x ville"
+              subtitle="Repere tout de suite dans quelles villes chaque produit performe le mieux, puis bascule entre CA, quantite, profit brut et marge."
+              data={productCityHeatmap}
+              filterSummary={heatmapFilterSummary}
+              formatMoney={formatMoney}
+              formatNumber={formatNumber}
+              formatPercent={formatPercent}
+              emptyText="Aucune matrice produit x ville disponible"
             />
           </div>
 
@@ -1465,17 +2073,13 @@ export default function DashboardPage() {
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <TableCard
-              title="Top clients par ventes"
-              rows={commercialData?.sales_by_customer || []}
+              title="Clients / points de vente les plus performants"
+              rows={commercialCustomers}
               emptyText="Aucun client facture"
               columns={[
                 { key: "business_name", label: "Client" },
-                { key: "city", label: "Ville" },
-                {
-                  key: "last_invoice_date",
-                  label: "Derniere facture",
-                  render: (row) => formatDate(row.last_invoice_date)
-                },
+                { key: "chain_name", label: "Chaine" },
+                { key: "sales_channel", label: "Canal" },
                 {
                   key: "total_sales_amount",
                   label: "Ventes",
@@ -1483,24 +2087,77 @@ export default function DashboardPage() {
                 },
                 {
                   key: "total_collected_amount",
-                  label: "Paye",
+                  label: "Encaisse",
                   render: (row) => formatMoney(row.total_collected_amount)
+                },
+                {
+                  key: "collection_rate_percent",
+                  label: "Tx enc.",
+                  render: (row) => formatPercent(row.collection_rate_percent)
+                }
+              ]}
+            />
+
+            <TableCard
+              title="Performance par depot"
+              rows={commercialWarehouses}
+              emptyText="Aucune vente par depot"
+              columns={[
+                { key: "warehouse_name", label: "Depot" },
+                { key: "warehouse_city", label: "Ville" },
+                {
+                  key: "total_sales_amount",
+                  label: "Ventes",
+                  render: (row) => formatMoney(row.total_sales_amount)
                 },
                 {
                   key: "gross_profit_amount",
                   label: "Profit brut",
                   render: (row) => formatMoney(row.gross_profit_amount)
+                },
+                {
+                  key: "collection_rate_percent",
+                  label: "Tx enc.",
+                  render: (row) => formatPercent(row.collection_rate_percent)
+                }
+              ]}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <TableCard
+              title="Produits qui apportent le plus de profit"
+              rows={mostProfitableProducts}
+              emptyText="Aucun produit rentable calcule"
+              columns={[
+                { key: "product_name", label: "Produit" },
+                { key: "category", label: "Categorie" },
+                {
+                  key: "total_sales_amount",
+                  label: "CA",
+                  render: (row) => formatMoney(row.total_sales_amount)
+                },
+                {
+                  key: "gross_profit_amount",
+                  label: "Profit brut",
+                  render: (row) => formatMoney(row.gross_profit_amount)
+                },
+                {
+                  key: "gross_margin_percent",
+                  label: "Marge",
+                  render: (row) => formatPercent(row.gross_margin_percent)
                 }
               ]}
             />
 
             <TableCard
               title="Clients a reactiver"
-              rows={commercialData?.reactivation_candidates || []}
+              rows={reactivationCandidates}
               emptyText="Aucun client prioritaire a reactiver"
               columns={[
                 { key: "business_name", label: "Client" },
-                { key: "city", label: "Ville" },
+                { key: "chain_name", label: "Chaine" },
+                { key: "sales_channel", label: "Canal" },
                 {
                   key: "days_since_last_invoice",
                   label: "Inactivite",
@@ -1517,6 +2174,48 @@ export default function DashboardPage() {
                   render: (row) => formatMoney(row.total_receivables)
                 }
               ]}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <TableCard
+              title="Produits en baisse"
+              rows={decliningProducts}
+              emptyText="Aucun produit en baisse sur la fenetre recente"
+              columns={[
+                { key: "product_name", label: "Produit" },
+                { key: "sku", label: "SKU" },
+                {
+                  key: "previous_quantity",
+                  label: "Qte prec.",
+                  render: (row) => formatNumber(row.previous_quantity)
+                },
+                {
+                  key: "current_quantity",
+                  label: "Qte recente",
+                  render: (row) => formatNumber(row.current_quantity)
+                },
+                {
+                  key: "sales_change_percent",
+                  label: "Var. CA",
+                  render: (row) => formatPercent(row.sales_change_percent)
+                }
+              ]}
+            />
+
+            <DualMetricRankingChart
+              title="Qui paie le plus"
+              subtitle="Comparer rapidement les encaissements reels aux restes dus sur les meilleurs clients."
+              rows={topPayingCustomers}
+              labelKey="business_name"
+              primaryKey="total_collected_amount"
+              secondaryKey="total_receivables"
+              primaryLabel="Encaisse"
+              secondaryLabel="Reste du"
+              primaryColor="bg-emerald-500"
+              secondaryColor="bg-amber-500"
+              valueFormatter={formatMoney}
+              emptyText="Aucun encaissement client"
             />
           </div>
         </div>
