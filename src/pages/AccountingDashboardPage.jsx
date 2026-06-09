@@ -12,6 +12,10 @@ function formatMoney(value) {
   }).format(Number(value || 0));
 }
 
+function formatOptionalMoney(value) {
+  return value === null || value === undefined ? "-" : formatMoney(value);
+}
+
 function formatPercent(value) {
   return `${Number(value || 0).toFixed(2)} %`;
 }
@@ -100,6 +104,18 @@ function getHealthBadgeClass(status) {
   }
 
   return "bg-red-100 text-red-700";
+}
+
+function getBreakEvenStatusLabel(status) {
+  if (status === "au-dessus") {
+    return "Au-dessus du point mort";
+  }
+
+  if (status === "en-dessous") {
+    return "En-dessous du point mort";
+  }
+
+  return "Point mort indetermine";
 }
 
 function ForecastCard({ horizon }) {
@@ -193,6 +209,9 @@ export default function AccountingDashboardPage() {
   const receivablesDueSoon = cashForecast.receivables_due_soon || [];
   const payablesDueSoon = cashForecast.payables_due_soon || [];
   const accountingHealth = data?.accounting_health || {};
+  const breakEvenAnalysis = data?.break_even_analysis || {};
+  const breakEvenSummary = breakEvenAnalysis.summary || {};
+  const breakEvenRows = breakEvenAnalysis.rows || [];
 
   return (
     <div className="space-y-8">
@@ -278,6 +297,123 @@ export default function AccountingDashboardPage() {
               : "Aucune projection"
           }
         />
+      </div>
+
+      <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="text-lg font-semibold text-slate-900">
+              Seuil de rentabilite
+            </div>
+            <div className="mt-1 text-sm text-slate-500">
+              Lecture du point mort observe sur la periode courante a partir du CA net, du cout variable direct et des charges d'exploitation.
+            </div>
+          </div>
+          <span
+            className={`inline-flex rounded-full px-4 py-2 text-sm font-semibold ${
+              breakEvenSummary.status === "au-dessus"
+                ? "bg-emerald-100 text-emerald-700"
+                : breakEvenSummary.status === "en-dessous"
+                ? "bg-amber-100 text-amber-700"
+                : "bg-slate-100 text-slate-700"
+            }`}
+          >
+            {getBreakEvenStatusLabel(breakEvenSummary.status)}
+          </span>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            title="CA net observe"
+            value={formatMoney(breakEvenSummary.net_sales_amount)}
+            subtitle={`${Number(breakEvenSummary.total_invoices || 0)} facture(s) / ${Number(
+              breakEvenSummary.total_expenses || 0
+            )} depense(s)`}
+          />
+          <StatCard
+            title="Point mort CA"
+            value={formatOptionalMoney(breakEvenSummary.break_even_sales_amount)}
+            subtitle={`Charges fixes observees: ${formatMoney(
+              breakEvenSummary.operating_expenses_amount
+            )}`}
+          />
+          <StatCard
+            title="Marge de securite"
+            value={formatOptionalMoney(breakEvenSummary.safety_margin_amount)}
+            subtitle={`Securite ${
+              breakEvenSummary.safety_margin_percent === null ||
+              breakEvenSummary.safety_margin_percent === undefined
+                ? "-"
+                : formatPercent(breakEvenSummary.safety_margin_percent)
+            }`}
+          />
+          <StatCard
+            title="Taux de contribution"
+            value={formatPercent(breakEvenSummary.contribution_margin_ratio)}
+            subtitle={`Point mort unites: ${
+              breakEvenSummary.break_even_units === null ||
+              breakEvenSummary.break_even_units === undefined
+                ? "-"
+                : new Intl.NumberFormat("fr-FR", {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 2
+                  }).format(Number(breakEvenSummary.break_even_units))
+            }`}
+          />
+        </div>
+
+        <div className="mt-6">
+          <TableCard
+            title="Evolution mensuelle du point mort"
+            rows={breakEvenRows}
+            emptyText="Aucune evolution mensuelle du seuil de rentabilite"
+            columns={[
+              { key: "period_label", label: "Periode" },
+              {
+                key: "net_sales_amount",
+                label: "CA net",
+                render: (row) => formatMoney(row.net_sales_amount)
+              },
+              {
+                key: "variable_cost_amount",
+                label: "Cout variable",
+                render: (row) => formatMoney(row.variable_cost_amount)
+              },
+              {
+                key: "operating_expenses_amount",
+                label: "Charges",
+                render: (row) => formatMoney(row.operating_expenses_amount)
+              },
+              {
+                key: "break_even_sales_amount",
+                label: "Point mort CA",
+                render: (row) => formatOptionalMoney(row.break_even_sales_amount)
+              },
+              {
+                key: "safety_margin_amount",
+                label: "Marge de securite",
+                render: (row) => formatOptionalMoney(row.safety_margin_amount)
+              },
+              {
+                key: "status",
+                label: "Statut",
+                render: (row) => (
+                  <span
+                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                      row.status === "au-dessus"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : row.status === "en-dessous"
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-slate-100 text-slate-700"
+                    }`}
+                  >
+                    {getBreakEvenStatusLabel(row.status)}
+                  </span>
+                )
+              }
+            ]}
+          />
+        </div>
       </div>
 
       <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">

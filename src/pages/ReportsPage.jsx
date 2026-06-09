@@ -426,6 +426,405 @@ const reportConfigs = {
     ],
     emptyText: "Aucune ligne commerciale sur cette periode"
   },
+  sales_by_category: {
+    exportKey: "sales-by-category",
+    label: "Ventes par categorie",
+    description:
+      "Vrai etat commercial par categorie avec volume, clients, depots, chiffre d'affaires, cout, profit et marge.",
+    endpoint: "/reports/sales-by-category",
+    buildParams: (filters, forExport = false) => ({
+      start_date: filters.start_date,
+      end_date: filters.end_date,
+      warehouse_id: filters.warehouse_id || undefined,
+      customer_id: filters.customer_id || undefined,
+      limit: forExport ? 5000 : 500
+    }),
+    exportFilename: (filters) =>
+      `ventes-par-categorie-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
+    summaryCards: (summary) => [
+      { title: "Categories", value: Number(summary.total_categories || 0) },
+      { title: "Produits", value: Number(summary.total_products || 0) },
+      { title: "Clients", value: Number(summary.total_customers || 0) },
+      { title: "Depots", value: Number(summary.total_warehouses || 0) },
+      { title: "Factures", value: Number(summary.total_invoices || 0) },
+      {
+        title: "Quantite",
+        value: formatNumber(summary.total_quantity)
+      },
+      {
+        title: "Chiffre d'affaires",
+        value: formatMoney(summary.total_sales_amount)
+      },
+      {
+        title: "Profit brut",
+        value: formatMoney(summary.gross_profit_amount)
+      },
+      {
+        title: "Marge moyenne",
+        value: formatPercent(summary.gross_margin_percent)
+      }
+    ],
+    columns: [
+      {
+        key: "category_label",
+        label: "Categorie",
+        csvValue: (row) => row.category_label
+      },
+      {
+        key: "products_count",
+        label: "Produits",
+        render: (row) => Number(row.products_count || 0),
+        csvValue: (row) => Number(row.products_count || 0)
+      },
+      {
+        key: "customers_count",
+        label: "Clients",
+        render: (row) => Number(row.customers_count || 0),
+        csvValue: (row) => Number(row.customers_count || 0)
+      },
+      {
+        key: "warehouses_count",
+        label: "Depots",
+        render: (row) => Number(row.warehouses_count || 0),
+        csvValue: (row) => Number(row.warehouses_count || 0)
+      },
+      {
+        key: "invoices_count",
+        label: "Factures",
+        render: (row) => Number(row.invoices_count || 0),
+        csvValue: (row) => Number(row.invoices_count || 0)
+      },
+      {
+        key: "total_quantity",
+        label: "Quantite",
+        render: (row) => formatNumber(row.total_quantity),
+        csvValue: (row) => row.total_quantity
+      },
+      {
+        key: "total_sales_amount",
+        label: "CA",
+        render: (row) => formatMoney(row.total_sales_amount),
+        csvValue: (row) => row.total_sales_amount
+      },
+      {
+        key: "total_cogs_amount",
+        label: "Cout",
+        render: (row) => formatMoney(row.total_cogs_amount),
+        csvValue: (row) => row.total_cogs_amount
+      },
+      {
+        key: "gross_profit_amount",
+        label: "Profit brut",
+        render: (row) => formatMoney(row.gross_profit_amount),
+        csvValue: (row) => row.gross_profit_amount
+      },
+      {
+        key: "gross_margin_percent",
+        label: "Marge",
+        render: (row) => formatPercent(row.gross_margin_percent),
+        csvValue: (row) => row.gross_margin_percent
+      },
+      {
+        key: "first_invoice_date",
+        label: "Premiere vente",
+        render: (row) => formatDate(row.first_invoice_date),
+        csvValue: (row) => formatDate(row.first_invoice_date)
+      },
+      {
+        key: "last_invoice_date",
+        label: "Derniere vente",
+        render: (row) => formatDate(row.last_invoice_date),
+        csvValue: (row) => formatDate(row.last_invoice_date)
+      }
+    ],
+    emptyText: "Aucune vente agregee par categorie sur cette periode"
+  },
+  sales_by_commercial: {
+    exportKey: "sales-by-commercial",
+    label: "Ventes par commercial",
+    description:
+      "Etat commercial par responsable avec CA, encaissements, encours, profit et taux de recouvrement. Fallback sur le responsable depot si le client n'a pas encore de commercial renseigne.",
+    endpoint: "/reports/sales-by-commercial",
+    buildParams: (filters, forExport = false) => ({
+      start_date: filters.start_date,
+      end_date: filters.end_date,
+      warehouse_id: filters.warehouse_id || undefined,
+      customer_id: filters.customer_id || undefined,
+      limit: forExport ? 5000 : 500
+    }),
+    exportFilename: (filters) =>
+      `ventes-par-commercial-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
+    summaryCards: (summary) => [
+      { title: "Commerciaux", value: Number(summary.total_commercials || 0) },
+      { title: "Clients", value: Number(summary.total_customers || 0) },
+      { title: "Villes", value: Number(summary.total_cities || 0) },
+      { title: "Depots", value: Number(summary.total_warehouses || 0) },
+      { title: "Factures", value: Number(summary.total_invoices || 0) },
+      {
+        title: "Chiffre d'affaires",
+        value: formatMoney(summary.total_sales_amount)
+      },
+      {
+        title: "Encaissements",
+        value: formatMoney(summary.total_collected_amount)
+      },
+      {
+        title: "Encours",
+        value: formatMoney(summary.total_receivables)
+      },
+      {
+        title: "Profit brut",
+        value: formatMoney(summary.gross_profit_amount)
+      }
+    ],
+    columns: [
+      {
+        key: "commercial_name",
+        label: "Commercial",
+        csvValue: (row) => row.commercial_name
+      },
+      {
+        key: "commercial_source",
+        label: "Source",
+        render: (row) =>
+          row.commercial_source === "client"
+            ? "Client"
+            : row.commercial_source === "depot_manager"
+            ? "Depot"
+            : "A completer",
+        csvValue: (row) => row.commercial_source || ""
+      },
+      {
+        key: "customers_count",
+        label: "Clients",
+        render: (row) => Number(row.customers_count || 0),
+        csvValue: (row) => Number(row.customers_count || 0)
+      },
+      {
+        key: "cities_count",
+        label: "Villes",
+        render: (row) => Number(row.cities_count || 0),
+        csvValue: (row) => Number(row.cities_count || 0)
+      },
+      {
+        key: "chains_count",
+        label: "Chaines",
+        render: (row) => Number(row.chains_count || 0),
+        csvValue: (row) => Number(row.chains_count || 0)
+      },
+      {
+        key: "warehouses_count",
+        label: "Depots",
+        render: (row) => Number(row.warehouses_count || 0),
+        csvValue: (row) => Number(row.warehouses_count || 0)
+      },
+      {
+        key: "invoices_count",
+        label: "Factures",
+        render: (row) => Number(row.invoices_count || 0),
+        csvValue: (row) => Number(row.invoices_count || 0)
+      },
+      {
+        key: "total_quantity",
+        label: "Quantite",
+        render: (row) => formatNumber(row.total_quantity),
+        csvValue: (row) => row.total_quantity
+      },
+      {
+        key: "total_sales_amount",
+        label: "CA",
+        render: (row) => formatMoney(row.total_sales_amount),
+        csvValue: (row) => row.total_sales_amount
+      },
+      {
+        key: "total_collected_amount",
+        label: "Encaisse",
+        render: (row) => formatMoney(row.total_collected_amount),
+        csvValue: (row) => row.total_collected_amount
+      },
+      {
+        key: "total_receivables",
+        label: "Encours",
+        render: (row) => formatMoney(row.total_receivables),
+        csvValue: (row) => row.total_receivables
+      },
+      {
+        key: "gross_profit_amount",
+        label: "Profit brut",
+        render: (row) => formatMoney(row.gross_profit_amount),
+        csvValue: (row) => row.gross_profit_amount
+      },
+      {
+        key: "collection_rate_percent",
+        label: "Recouvrement",
+        render: (row) => formatPercent(row.collection_rate_percent),
+        csvValue: (row) => row.collection_rate_percent
+      },
+      {
+        key: "gross_margin_percent",
+        label: "Marge",
+        render: (row) => formatPercent(row.gross_margin_percent),
+        csvValue: (row) => row.gross_margin_percent
+      }
+    ],
+    emptyText: "Aucune vente agregee par commercial sur cette periode"
+  },
+  break_even: {
+    exportKey: "break-even",
+    label: "Seuil de rentabilite",
+    description:
+      "Point mort observe sur la periode, a partir du CA net, du cout variable direct et des charges d'exploitation, avec evolution mensuelle.",
+    endpoint: "/reports/break-even",
+    buildParams: (filters) => ({
+      start_date: filters.start_date,
+      end_date: filters.end_date
+    }),
+    exportFilename: (filters) =>
+      `seuil-rentabilite-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
+    summaryCards: (summary) => [
+      { title: "Factures", value: Number(summary.total_invoices || 0) },
+      { title: "Depenses", value: Number(summary.total_expenses || 0) },
+      {
+        title: "CA net",
+        value: formatMoney(summary.net_sales_amount)
+      },
+      {
+        title: "Cout variable",
+        value: formatMoney(summary.variable_cost_amount)
+      },
+      {
+        title: "Point mort CA",
+        value:
+          summary.break_even_sales_amount === null ||
+          summary.break_even_sales_amount === undefined
+            ? "-"
+            : formatMoney(summary.break_even_sales_amount)
+      },
+      {
+        title: "Marge de securite",
+        value:
+          summary.safety_margin_amount === null ||
+          summary.safety_margin_amount === undefined
+            ? "-"
+            : formatMoney(summary.safety_margin_amount)
+      },
+      {
+        title: "Taux de contribution",
+        value: formatPercent(summary.contribution_margin_ratio)
+      },
+      {
+        title: "Securite %",
+        value:
+          summary.safety_margin_percent === null ||
+          summary.safety_margin_percent === undefined
+            ? "-"
+            : formatPercent(summary.safety_margin_percent)
+      }
+    ],
+    columns: [
+      {
+        key: "period_label",
+        label: "Periode",
+        csvValue: (row) => row.period_label
+      },
+      {
+        key: "invoices_count",
+        label: "Factures",
+        render: (row) => Number(row.invoices_count || 0),
+        csvValue: (row) => Number(row.invoices_count || 0)
+      },
+      {
+        key: "expenses_count",
+        label: "Depenses",
+        render: (row) => Number(row.expenses_count || 0),
+        csvValue: (row) => Number(row.expenses_count || 0)
+      },
+      {
+        key: "total_quantity",
+        label: "Quantite",
+        render: (row) => formatNumber(row.total_quantity),
+        csvValue: (row) => row.total_quantity
+      },
+      {
+        key: "net_sales_amount",
+        label: "CA net",
+        render: (row) => formatMoney(row.net_sales_amount),
+        csvValue: (row) => row.net_sales_amount
+      },
+      {
+        key: "variable_cost_amount",
+        label: "Cout variable",
+        render: (row) => formatMoney(row.variable_cost_amount),
+        csvValue: (row) => row.variable_cost_amount
+      },
+      {
+        key: "contribution_margin_amount",
+        label: "Marge sur cout variable",
+        render: (row) => formatMoney(row.contribution_margin_amount),
+        csvValue: (row) => row.contribution_margin_amount
+      },
+      {
+        key: "contribution_margin_ratio",
+        label: "Taux de contribution",
+        render: (row) => formatPercent(row.contribution_margin_ratio),
+        csvValue: (row) => row.contribution_margin_ratio
+      },
+      {
+        key: "operating_expenses_amount",
+        label: "Charges",
+        render: (row) => formatMoney(row.operating_expenses_amount),
+        csvValue: (row) => row.operating_expenses_amount
+      },
+      {
+        key: "break_even_sales_amount",
+        label: "Point mort CA",
+        render: (row) =>
+          row.break_even_sales_amount === null || row.break_even_sales_amount === undefined
+            ? "-"
+            : formatMoney(row.break_even_sales_amount),
+        csvValue: (row) => row.break_even_sales_amount ?? ""
+      },
+      {
+        key: "break_even_units",
+        label: "Point mort unites",
+        render: (row) =>
+          row.break_even_units === null || row.break_even_units === undefined
+            ? "-"
+            : formatNumber(row.break_even_units),
+        csvValue: (row) => row.break_even_units ?? ""
+      },
+      {
+        key: "safety_margin_amount",
+        label: "Marge de securite",
+        render: (row) =>
+          row.safety_margin_amount === null || row.safety_margin_amount === undefined
+            ? "-"
+            : formatMoney(row.safety_margin_amount),
+        csvValue: (row) => row.safety_margin_amount ?? ""
+      },
+      {
+        key: "safety_margin_percent",
+        label: "Securite %",
+        render: (row) =>
+          row.safety_margin_percent === null || row.safety_margin_percent === undefined
+            ? "-"
+            : formatPercent(row.safety_margin_percent),
+        csvValue: (row) => row.safety_margin_percent ?? ""
+      },
+      {
+        key: "status",
+        label: "Statut",
+        render: (row) =>
+          row.status === "au-dessus"
+            ? "Au-dessus"
+            : row.status === "en-dessous"
+            ? "En-dessous"
+            : "Indetermine",
+        csvValue: (row) => row.status || ""
+      }
+    ],
+    emptyText: "Aucune lecture du seuil de rentabilite sur cette periode"
+  },
   product_ledger: {
     exportKey: "product-ledger",
     label: "Compte courant produits",
@@ -812,6 +1211,9 @@ const reportConfigs = {
 
 const visibleReportKeys = [
   "customer_ledger",
+  "sales_by_category",
+  "sales_by_commercial",
+  "break_even",
   "product_sales",
   "stock_state",
   "cash_forecast"
@@ -1308,6 +1710,105 @@ export default function ReportsPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+            </div>
+          ) : null}
+
+          {activeReport === "sales_by_category" ||
+          activeReport === "sales_by_commercial" ? (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date debut
+                </label>
+                <input
+                  type="date"
+                  name="start_date"
+                  value={filters.start_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date fin
+                </label>
+                <input
+                  type="date"
+                  name="end_date"
+                  value={filters.end_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Depot
+                </label>
+                <select
+                  name="warehouse_id"
+                  value={filters.warehouse_id}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les depots</option>
+                  {sortedWarehouses.map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name} - {warehouse.city}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Client
+                </label>
+                <select
+                  name="customer_id"
+                  value={filters.customer_id}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les clients</option>
+                  {sortedCustomers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.business_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : null}
+
+          {activeReport === "break_even" ? (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date debut
+                </label>
+                <input
+                  type="date"
+                  name="start_date"
+                  value={filters.start_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date fin
+                </label>
+                <input
+                  type="date"
+                  name="end_date"
+                  value={filters.end_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
               </div>
             </div>
           ) : null}

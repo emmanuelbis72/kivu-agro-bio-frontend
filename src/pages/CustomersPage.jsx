@@ -13,6 +13,7 @@ const initialForm = {
   city: "",
   chain_name: "",
   sales_channel: "",
+  commercial_name: "",
   address: "",
   payment_terms_days: "",
   credit_limit: "",
@@ -30,6 +31,7 @@ function normalizeForm(form) {
     city: form.city.trim(),
     chain_name: form.chain_name.trim(),
     sales_channel: form.sales_channel.trim(),
+    commercial_name: form.commercial_name.trim(),
     address: form.address.trim(),
     payment_terms_days:
       form.payment_terms_days === "" ? 0 : Number(form.payment_terms_days),
@@ -56,6 +58,10 @@ export default function CustomersPage() {
   const [search, setSearch] = useState("");
   const [editingCustomerId, setEditingCustomerId] = useState(null);
   const [form, setForm] = useState(initialForm);
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState([]);
+  const [bulkCommercialName, setBulkCommercialName] = useState("");
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [onlyMissingCommercial, setOnlyMissingCommercial] = useState(false);
 
   async function fetchCustomers() {
     try {
@@ -106,6 +112,7 @@ export default function CustomersPage() {
       city: customer.city || "",
       chain_name: customer.chain_name || "",
       sales_channel: customer.sales_channel || "",
+      commercial_name: customer.commercial_name || "",
       address: customer.address || "",
       payment_terms_days: customer.payment_terms_days ?? "",
       credit_limit: customer.credit_limit ?? "",
@@ -188,14 +195,66 @@ export default function CustomersPage() {
     }
   }
 
-  const filteredCustomers = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+  function toggleCustomerSelection(customerId) {
+    setSelectedCustomerIds((prev) =>
+      prev.includes(customerId)
+        ? prev.filter((value) => value !== customerId)
+        : [...prev, customerId]
+    );
+  }
 
-    if (!keyword) {
-      return customers;
+  function handleSelectAllFiltered() {
+    setSelectedCustomerIds(filteredCustomers.map((customer) => customer.id));
+  }
+
+  function handleClearSelection() {
+    setSelectedCustomerIds([]);
+  }
+
+  async function handleBulkCommercialAssign() {
+    if (selectedCustomerIds.length === 0) {
+      setError("Selectionne au moins un client pour l'affectation commerciale.");
+      return;
     }
 
-    return customers.filter((customer) =>
+    try {
+      setBulkLoading(true);
+      setError("");
+      setSuccessMessage("");
+
+      await api.put("/customers/bulk-commercial", {
+        customer_ids: selectedCustomerIds,
+        commercial_name: bulkCommercialName.trim()
+      });
+
+      setSuccessMessage("Affectation commerciale mise a jour en lot.");
+      setSelectedCustomerIds([]);
+      await fetchCustomers();
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+          "Impossible de mettre a jour le commercial en lot."
+      );
+    } finally {
+      setBulkLoading(false);
+    }
+  }
+
+  const filteredCustomers = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    return customers.filter((customer) => {
+      if (
+        onlyMissingCommercial &&
+        String(customer.commercial_name || "").trim() !== ""
+      ) {
+        return false;
+      }
+
+      if (!keyword) {
+        return true;
+      }
+
+      return (
       [
         customer.business_name,
         customer.contact_name,
@@ -204,13 +263,15 @@ export default function CustomersPage() {
         customer.city,
         customer.chain_name,
         customer.sales_channel,
+        customer.commercial_name,
         customer.address,
         customer.customer_type
       ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(keyword))
-    );
-  }, [customers, search]);
+      );
+    });
+  }, [customers, onlyMissingCommercial, search]);
 
   return (
     <div className="space-y-8">
@@ -359,6 +420,19 @@ export default function CustomersPage() {
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
+              Commercial responsable
+            </label>
+            <input
+              name="commercial_name"
+              value={form.commercial_name}
+              onChange={handleChange}
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+              placeholder="Ex: Emmanuel / Equipe Kin"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
               Délai de paiement (jours)
             </label>
             <input
@@ -453,17 +527,71 @@ export default function CustomersPage() {
       </div>
 
       <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
+        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <div className="text-sm font-semibold text-amber-800">
+            Affectation commerciale en lot
+          </div>
+          <div className="mt-1 text-sm text-amber-700">
+            Renseigne progressivement le commercial responsable sur les clients selectionnes pour fiabiliser l'etat Ventes par commercial.
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:items-end">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Commercial responsable
+              </label>
+              <input
+                value={bulkCommercialName}
+                onChange={(event) => setBulkCommercialName(event.target.value)}
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                placeholder="Ex: Emmanuel / Equipe Kin"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleSelectAllFiltered}
+              className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700"
+            >
+              Tout selectionner
+            </button>
+            <button
+              type="button"
+              onClick={handleClearSelection}
+              className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700"
+            >
+              Vider
+            </button>
+            <button
+              type="button"
+              onClick={handleBulkCommercialAssign}
+              disabled={bulkLoading}
+              className="rounded-2xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {bulkLoading ? "Affectation..." : `Affecter (${selectedCustomerIds.length})`}
+            </button>
+          </div>
+        </div>
+
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="text-lg font-semibold text-slate-900">
             Liste des clients
           </div>
 
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher un client..."
-            className="w-full md:w-80 rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-          />
+          <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row md:items-center">
+            <label className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 px-4 py-3 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={onlyMissingCommercial}
+                onChange={(event) => setOnlyMissingCommercial(event.target.checked)}
+              />
+              Voir seulement les clients sans commercial
+            </label>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher un client..."
+              className="w-full md:w-80 rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+            />
+          </div>
         </div>
 
         <div className="mt-6">
@@ -477,8 +605,20 @@ export default function CustomersPage() {
               rows={filteredCustomers}
               emptyText="Aucun client trouvé"
               columns={[
+                {
+                  key: "select",
+                  label: "Sel.",
+                  render: (row) => (
+                    <input
+                      type="checkbox"
+                      checked={selectedCustomerIds.includes(row.id)}
+                      onChange={() => toggleCustomerSelection(row.id)}
+                    />
+                  )
+                },
                 { key: "business_name", label: "Client" },
                 { key: "customer_type", label: "Type" },
+                { key: "commercial_name", label: "Commercial" },
                 { key: "chain_name", label: "Chaine" },
                 { key: "sales_channel", label: "Canal" },
                 { key: "city", label: "Ville" },
