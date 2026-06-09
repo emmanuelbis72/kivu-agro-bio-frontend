@@ -1,7 +1,9 @@
 export default function TableCard({ title, columns = [], rows = [], emptyText = "Aucune donnée" }) {
   return (
     <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
-      <div className="mb-4 text-lg font-semibold text-slate-900">{title}</div>
+      {title ? (
+        <div className="mb-4 text-lg font-semibold text-slate-900">{title}</div>
+      ) : null}
 
       {rows.length === 0 ? (
         <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">

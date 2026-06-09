@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import api from "../api/axios";
 import SectionTitle from "../components/ui/SectionTitle";
 import StatCard from "../components/ui/StatCard";
@@ -60,6 +61,8 @@ function getInitialFilters() {
     as_of_date: new Date().toISOString().split("T")[0],
     start_date: startDate.toISOString().split("T")[0],
     end_date: endDate.toISOString().split("T")[0],
+    budget_id: "",
+    category: "",
     warehouse_id: "",
     customer_id: "",
     product_id: "",
@@ -825,6 +828,524 @@ const reportConfigs = {
     ],
     emptyText: "Aucune lecture du seuil de rentabilite sur cette periode"
   },
+  income_statement: {
+    exportKey: "income-statement",
+    label: "Compte de resultat",
+    description:
+      "Produits, charges, benefice brut et resultat net sur la periode.",
+    endpoint: "/reports/income-statement",
+    buildParams: (filters) => ({
+      start_date: filters.start_date || undefined,
+      end_date: filters.end_date || undefined
+    }),
+    exportFilename: (filters) =>
+      `compte-resultat-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
+    summaryCards: (summary) => [
+      { title: "Produits", value: formatMoney(summary.total_revenue) },
+      { title: "Charges", value: formatMoney(summary.total_expense) },
+      { title: "Benefice brut", value: formatMoney(summary.gross_profit_amount) },
+      { title: "Resultat net", value: formatMoney(summary.net_result) }
+    ],
+    columns: [
+      { key: "section", label: "Section", csvValue: (row) => row.section || "" },
+      { key: "account_number", label: "Compte", csvValue: (row) => row.account_number || "" },
+      { key: "account_name", label: "Libelle", csvValue: (row) => row.account_name || "" },
+      { key: "account_type", label: "Type", csvValue: (row) => row.account_type || "" },
+      {
+        key: "total_debit",
+        label: "Debit",
+        render: (row) => formatMoney(row.total_debit),
+        csvValue: (row) => row.total_debit
+      },
+      {
+        key: "total_credit",
+        label: "Credit",
+        render: (row) => formatMoney(row.total_credit),
+        csvValue: (row) => row.total_credit
+      },
+      {
+        key: "net_amount",
+        label: "Net",
+        render: (row) => formatMoney(row.net_amount),
+        csvValue: (row) => row.net_amount
+      }
+    ],
+    emptyText: "Aucune ligne comptable disponible"
+  },
+  treasury_statement: {
+    exportKey: "treasury-statement",
+    label: "Etat de tresorerie",
+    description:
+      "Encaissements, decaissements et flux nets de tresorerie par periode.",
+    endpoint: "/reports/treasury-statement",
+    buildParams: (filters) => ({
+      start_date: filters.start_date || undefined,
+      end_date: filters.end_date || undefined
+    }),
+    exportFilename: (filters) =>
+      `etat-tresorerie-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
+    summaryCards: (summary) => [
+      { title: "Encaissements", value: formatMoney(summary.total_receipts) },
+      { title: "Sorties", value: formatMoney(summary.total_outflows) },
+      { title: "Flux net", value: formatMoney(summary.net_cash_flow) },
+      { title: "Tresorerie observee", value: formatMoney(summary.current_cash_base) }
+    ],
+    columns: [
+      { key: "period_label", label: "Periode", csvValue: (row) => row.period_label || "" },
+      {
+        key: "customer_receipts",
+        label: "Encaissements",
+        render: (row) => formatMoney(row.customer_receipts),
+        csvValue: (row) => row.customer_receipts
+      },
+      {
+        key: "supplier_payments",
+        label: "Paiements fournisseurs",
+        render: (row) => formatMoney(row.supplier_payments),
+        csvValue: (row) => row.supplier_payments
+      },
+      {
+        key: "operating_expenses",
+        label: "Depenses",
+        render: (row) => formatMoney(row.operating_expenses),
+        csvValue: (row) => row.operating_expenses
+      },
+      {
+        key: "total_outflows",
+        label: "Sorties",
+        render: (row) => formatMoney(row.total_outflows),
+        csvValue: (row) => row.total_outflows
+      },
+      {
+        key: "net_cash_flow",
+        label: "Flux net",
+        render: (row) => formatMoney(row.net_cash_flow),
+        csvValue: (row) => row.net_cash_flow
+      },
+      {
+        key: "cumulative_net_cash_flow",
+        label: "Cumul",
+        render: (row) => formatMoney(row.cumulative_net_cash_flow),
+        csvValue: (row) => row.cumulative_net_cash_flow
+      }
+    ],
+    emptyText: "Aucune periode de tresorerie disponible"
+  },
+  receipts_journal: {
+    exportKey: "receipts-journal",
+    label: "Journal des recettes",
+    description:
+      "Paiements clients encaisses, avec facture, depot et comptabilisation.",
+    endpoint: "/reports/receipts-journal",
+    buildParams: (filters) => ({
+      start_date: filters.start_date || undefined,
+      end_date: filters.end_date || undefined,
+      warehouse_id: filters.warehouse_id || undefined,
+      customer_id: filters.customer_id || undefined
+    }),
+    exportFilename: (filters) =>
+      `journal-recettes-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
+    summaryCards: (summary) => [
+      { title: "Paiements", value: Number(summary.total_payments || 0) },
+      { title: "Clients", value: Number(summary.total_customers || 0) },
+      { title: "Depots", value: Number(summary.total_warehouses || 0) },
+      { title: "Total encaisse", value: formatMoney(summary.total_amount) }
+    ],
+    columns: [
+      {
+        key: "payment_date",
+        label: "Date",
+        render: (row) => formatDate(row.payment_date),
+        csvValue: (row) => formatDate(row.payment_date)
+      },
+      { key: "customer_name", label: "Client", csvValue: (row) => row.customer_name || "" },
+      { key: "warehouse_name", label: "Depot", csvValue: (row) => row.warehouse_name || "" },
+      { key: "invoice_number", label: "Facture", csvValue: (row) => row.invoice_number || "" },
+      { key: "payment_method", label: "Mode", csvValue: (row) => row.payment_method || "" },
+      {
+        key: "amount",
+        label: "Montant",
+        render: (row) => formatMoney(row.amount),
+        csvValue: (row) => row.amount
+      },
+      { key: "reference", label: "Reference", csvValue: (row) => row.reference || "" },
+      { key: "accounting_status", label: "Compta", csvValue: (row) => row.accounting_status || "" }
+    ],
+    emptyText: "Aucun paiement client sur cette periode"
+  },
+  expenses_journal: {
+    exportKey: "expenses-journal",
+    label: "Journal des depenses",
+    description:
+      "Historique des depenses avec categorie, fournisseur et statut comptable.",
+    endpoint: "/reports/expenses-journal",
+    buildParams: (filters) => ({
+      start_date: filters.start_date || undefined,
+      end_date: filters.end_date || undefined,
+      category: filters.category || undefined
+    }),
+    exportFilename: (filters) =>
+      `journal-depenses-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
+    summaryCards: (summary) => [
+      { title: "Depenses", value: Number(summary.total_expenses || 0) },
+      { title: "Categories", value: Number(summary.total_categories || 0) },
+      { title: "Montant", value: formatMoney(summary.total_amount) },
+      { title: "Postees", value: Number(summary.posted_count || 0) }
+    ],
+    columns: [
+      {
+        key: "expense_date",
+        label: "Date",
+        render: (row) => formatDate(row.expense_date),
+        csvValue: (row) => formatDate(row.expense_date)
+      },
+      { key: "category", label: "Categorie", csvValue: (row) => row.category || "" },
+      { key: "description", label: "Description", csvValue: (row) => row.description || "" },
+      { key: "supplier_name", label: "Fournisseur", csvValue: (row) => row.supplier_name || "" },
+      { key: "payment_method", label: "Mode", csvValue: (row) => row.payment_method || "" },
+      {
+        key: "amount",
+        label: "Montant",
+        render: (row) => formatMoney(row.amount),
+        csvValue: (row) => row.amount
+      },
+      { key: "reference", label: "Reference", csvValue: (row) => row.reference || "" },
+      { key: "accounting_status", label: "Compta", csvValue: (row) => row.accounting_status || "" }
+    ],
+    emptyText: "Aucune depense sur cette periode"
+  },
+  expenses_by_category: {
+    exportKey: "expenses-by-category",
+    label: "Depenses par categorie",
+    description:
+      "Analyse des charges par categorie de depense et poids relatif.",
+    endpoint: "/reports/expenses-by-category",
+    buildParams: (filters) => ({
+      start_date: filters.start_date || undefined,
+      end_date: filters.end_date || undefined,
+      category: filters.category || undefined
+    }),
+    exportFilename: (filters) =>
+      `depenses-par-categorie-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
+    summaryCards: (summary) => [
+      { title: "Categories", value: Number(summary.total_categories || 0) },
+      { title: "Depenses", value: Number(summary.total_expenses || 0) },
+      { title: "Montant", value: formatMoney(summary.total_amount) },
+      { title: "Marketing", value: formatMoney(summary.marketing_amount) }
+    ],
+    columns: [
+      { key: "category_label", label: "Categorie", csvValue: (row) => row.category_label || "" },
+      {
+        key: "expenses_count",
+        label: "Lignes",
+        render: (row) => Number(row.expenses_count || 0),
+        csvValue: (row) => Number(row.expenses_count || 0)
+      },
+      {
+        key: "suppliers_count",
+        label: "Fournisseurs",
+        render: (row) => Number(row.suppliers_count || 0),
+        csvValue: (row) => Number(row.suppliers_count || 0)
+      },
+      {
+        key: "average_amount",
+        label: "Panier moyen",
+        render: (row) => formatMoney(row.average_amount),
+        csvValue: (row) => row.average_amount
+      },
+      {
+        key: "total_amount",
+        label: "Montant",
+        render: (row) => formatMoney(row.total_amount),
+        csvValue: (row) => row.total_amount
+      },
+      {
+        key: "first_expense_date",
+        label: "Premiere",
+        render: (row) => formatDate(row.first_expense_date),
+        csvValue: (row) => formatDate(row.first_expense_date)
+      },
+      {
+        key: "last_expense_date",
+        label: "Derniere",
+        render: (row) => formatDate(row.last_expense_date),
+        csvValue: (row) => formatDate(row.last_expense_date)
+      }
+    ],
+    emptyText: "Aucune categorie de depense disponible"
+  },
+  margin_by_city: {
+    exportKey: "margin-by-city",
+    label: "Marge par ville",
+    description:
+      "Chiffre d'affaires, profit brut et recouvrement par ville cliente.",
+    endpoint: "/reports/margin-by-city",
+    buildParams: (filters) => ({
+      start_date: filters.start_date || undefined,
+      end_date: filters.end_date || undefined,
+      warehouse_id: filters.warehouse_id || undefined,
+      customer_id: filters.customer_id || undefined
+    }),
+    exportFilename: (filters) =>
+      `marge-par-ville-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
+    summaryCards: (summary) => [
+      { title: "Villes", value: Number(summary.total_cities || 0) },
+      { title: "CA", value: formatMoney(summary.total_sales_amount) },
+      { title: "Profit brut", value: formatMoney(summary.gross_profit_amount) },
+      { title: "Marge %", value: formatPercent(summary.gross_margin_percent) }
+    ],
+    columns: [
+      { key: "customer_city", label: "Ville", csvValue: (row) => row.customer_city || "" },
+      {
+        key: "customers_count",
+        label: "Clients",
+        render: (row) => Number(row.customers_count || 0),
+        csvValue: (row) => Number(row.customers_count || 0)
+      },
+      {
+        key: "invoices_count",
+        label: "Factures",
+        render: (row) => Number(row.invoices_count || 0),
+        csvValue: (row) => Number(row.invoices_count || 0)
+      },
+      {
+        key: "total_sales_amount",
+        label: "CA",
+        render: (row) => formatMoney(row.total_sales_amount),
+        csvValue: (row) => row.total_sales_amount
+      },
+      {
+        key: "gross_profit_amount",
+        label: "Profit brut",
+        render: (row) => formatMoney(row.gross_profit_amount),
+        csvValue: (row) => row.gross_profit_amount
+      },
+      {
+        key: "gross_margin_percent",
+        label: "Marge %",
+        render: (row) => formatPercent(row.gross_margin_percent),
+        csvValue: (row) => row.gross_margin_percent
+      },
+      {
+        key: "total_collected_amount",
+        label: "Encaisse",
+        render: (row) => formatMoney(row.total_collected_amount),
+        csvValue: (row) => row.total_collected_amount
+      },
+      {
+        key: "collection_rate_percent",
+        label: "Recouvrement %",
+        render: (row) => formatPercent(row.collection_rate_percent),
+        csvValue: (row) => row.collection_rate_percent
+      }
+    ],
+    emptyText: "Aucune ville cliente sur cette periode"
+  },
+  margin_by_customer: {
+    exportKey: "margin-by-customer",
+    label: "Marge par client",
+    description:
+      "Analyse client par client du CA, profit brut, encaissements et creances.",
+    endpoint: "/reports/margin-by-customer",
+    buildParams: (filters) => ({
+      start_date: filters.start_date || undefined,
+      end_date: filters.end_date || undefined,
+      warehouse_id: filters.warehouse_id || undefined,
+      customer_id: filters.customer_id || undefined
+    }),
+    exportFilename: (filters) =>
+      `marge-par-client-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
+    summaryCards: (summary) => [
+      { title: "Clients", value: Number(summary.total_customers || 0) },
+      { title: "CA", value: formatMoney(summary.total_sales_amount) },
+      { title: "Profit brut", value: formatMoney(summary.gross_profit_amount) },
+      { title: "Marge %", value: formatPercent(summary.gross_margin_percent) }
+    ],
+    columns: [
+      { key: "customer_name", label: "Client", csvValue: (row) => row.customer_name || "" },
+      { key: "customer_city", label: "Ville", csvValue: (row) => row.customer_city || "" },
+      {
+        key: "invoices_count",
+        label: "Factures",
+        render: (row) => Number(row.invoices_count || 0),
+        csvValue: (row) => Number(row.invoices_count || 0)
+      },
+      {
+        key: "total_sales_amount",
+        label: "CA",
+        render: (row) => formatMoney(row.total_sales_amount),
+        csvValue: (row) => row.total_sales_amount
+      },
+      {
+        key: "gross_profit_amount",
+        label: "Profit brut",
+        render: (row) => formatMoney(row.gross_profit_amount),
+        csvValue: (row) => row.gross_profit_amount
+      },
+      {
+        key: "gross_margin_percent",
+        label: "Marge %",
+        render: (row) => formatPercent(row.gross_margin_percent),
+        csvValue: (row) => row.gross_margin_percent
+      },
+      {
+        key: "total_collected_amount",
+        label: "Encaisse",
+        render: (row) => formatMoney(row.total_collected_amount),
+        csvValue: (row) => row.total_collected_amount
+      },
+      {
+        key: "total_receivables",
+        label: "Creances",
+        render: (row) => formatMoney(row.total_receivables),
+        csvValue: (row) => row.total_receivables
+      }
+    ],
+    emptyText: "Aucun client sur cette periode"
+  },
+  budget_vs_actual: {
+    exportKey: "budget-vs-actual",
+    label: "Budget vs realise",
+    description:
+      "Comparaison budgetaire entre le plan et le realise par categorie.",
+    endpoint: "/reports/budget-vs-actual",
+    buildParams: (filters) => ({
+      budget_id: filters.budget_id || undefined
+    }),
+    exportFilename: (filters) =>
+      `budget-vs-realise-${filters.budget_id || "auto"}.csv`,
+    summaryCards: (summary) => [
+      { title: "Budget", value: formatMoney(summary.total_planned) },
+      { title: "Realise", value: formatMoney(summary.total_actual) },
+      { title: "Ecart", value: formatMoney(summary.total_variance) },
+      { title: "Atteinte %", value: formatPercent(summary.attainment_percent) }
+    ],
+    columns: [
+      { key: "category_label", label: "Categorie", csvValue: (row) => row.category_label || "" },
+      { key: "category_type", label: "Type", csvValue: (row) => row.category_type || "" },
+      {
+        key: "planned_total",
+        label: "Budget",
+        render: (row) => formatMoney(row.planned_total),
+        csvValue: (row) => row.planned_total
+      },
+      {
+        key: "actual_total",
+        label: "Realise",
+        render: (row) => formatMoney(row.actual_total),
+        csvValue: (row) => row.actual_total
+      },
+      {
+        key: "variance_total",
+        label: "Ecart",
+        render: (row) => formatMoney(row.variance_total),
+        csvValue: (row) => row.variance_total
+      },
+      {
+        key: "attainment_percent",
+        label: "Atteinte %",
+        render: (row) => formatPercent(row.attainment_percent),
+        csvValue: (row) => row.attainment_percent
+      }
+    ],
+    emptyText: "Aucun budget charge"
+  },
+  marketing_ratio: {
+    exportKey: "marketing-ratio",
+    label: "Marketing / CA",
+    description:
+      "Part des depenses marketing dans le chiffre d'affaires facture.",
+    endpoint: "/reports/marketing-ratio",
+    buildParams: (filters) => ({
+      start_date: filters.start_date || undefined,
+      end_date: filters.end_date || undefined
+    }),
+    exportFilename: (filters) =>
+      `marketing-sur-ca-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
+    summaryCards: (summary) => [
+      { title: "CA", value: formatMoney(summary.total_sales_amount) },
+      { title: "Marketing", value: formatMoney(summary.marketing_expenses_amount) },
+      { title: "Marketing % CA", value: formatPercent(summary.marketing_ratio_percent) }
+    ],
+    columns: [
+      { key: "period_label", label: "Periode", csvValue: (row) => row.period_label || "" },
+      {
+        key: "total_sales_amount",
+        label: "CA",
+        render: (row) => formatMoney(row.total_sales_amount),
+        csvValue: (row) => row.total_sales_amount
+      },
+      {
+        key: "marketing_expenses_amount",
+        label: "Marketing",
+        render: (row) => formatMoney(row.marketing_expenses_amount),
+        csvValue: (row) => row.marketing_expenses_amount
+      },
+      {
+        key: "marketing_ratio_percent",
+        label: "Marketing % CA",
+        render: (row) => formatPercent(row.marketing_ratio_percent),
+        csvValue: (row) => row.marketing_ratio_percent
+      }
+    ],
+    emptyText: "Aucune periode marketing disponible"
+  },
+  commission_due: {
+    exportKey: "commission-due",
+    label: "Commissions dues",
+    description:
+      "Commissions calculees sur les montants reellement encaisses pour commerciaux et revendeurs.",
+    endpoint: "/reports/commission-due",
+    buildParams: (filters) => ({
+      start_date: filters.start_date || undefined,
+      end_date: filters.end_date || undefined,
+      warehouse_id: filters.warehouse_id || undefined,
+      customer_id: filters.customer_id || undefined
+    }),
+    exportFilename: (filters) =>
+      `commissions-dues-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
+    summaryCards: (summary) => [
+      { title: "Beneficiaires", value: Number(summary.total_beneficiaries || 0) },
+      { title: "Encaisse base", value: formatMoney(summary.total_collections_amount) },
+      { title: "Commission due", value: formatMoney(summary.total_commission_due_amount) },
+      { title: "Profils configures", value: Number(summary.configured_profiles_count || 0) }
+    ],
+    columns: [
+      { key: "beneficiary_type", label: "Type", csvValue: (row) => row.beneficiary_type || "" },
+      { key: "beneficiary_name", label: "Beneficiaire", csvValue: (row) => row.beneficiary_name || "" },
+      {
+        key: "payments_count",
+        label: "Paiements",
+        render: (row) => Number(row.payments_count || 0),
+        csvValue: (row) => Number(row.payments_count || 0)
+      },
+      {
+        key: "collections_amount",
+        label: "Encaisse",
+        render: (row) => formatMoney(row.collections_amount),
+        csvValue: (row) => row.collections_amount
+      },
+      {
+        key: "commission_rate_percent",
+        label: "Taux %",
+        render: (row) => formatPercent(row.commission_rate_percent),
+        csvValue: (row) => row.commission_rate_percent
+      },
+      {
+        key: "commission_due_amount",
+        label: "Commission",
+        render: (row) => formatMoney(row.commission_due_amount),
+        csvValue: (row) => row.commission_due_amount
+      },
+      {
+        key: "profile_configured",
+        label: "Profil configure",
+        render: (row) => formatBoolean(row.profile_configured),
+        csvValue: (row) => formatBoolean(row.profile_configured)
+      }
+    ],
+    emptyText: "Aucune commission calculee"
+  },
   product_ledger: {
     exportKey: "product-ledger",
     label: "Compte courant produits",
@@ -1209,22 +1730,136 @@ const reportConfigs = {
   }
 };
 
-const visibleReportKeys = [
-  "customer_ledger",
-  "sales_by_category",
-  "sales_by_commercial",
-  "break_even",
-  "product_sales",
-  "stock_state",
-  "cash_forecast"
+const reportSections = [
+  {
+    title: "Finance & compta",
+    keys: [
+      "income_statement",
+      "treasury_statement",
+      "expenses_journal",
+      "expenses_by_category",
+      "budget_vs_actual",
+      "marketing_ratio",
+      "break_even",
+      "cash_forecast"
+    ]
+  },
+  {
+    title: "Recouvrement",
+    keys: [
+      "receipts_journal",
+      "customer_aging",
+      "supplier_aging",
+      "customer_ledger"
+    ]
+  },
+  {
+    title: "Marge & commercial",
+    keys: [
+      "margin_by_city",
+      "margin_by_customer",
+      "sales_by_category",
+      "sales_by_commercial",
+      "product_sales"
+    ]
+  },
+  {
+    title: "Stock",
+    keys: ["stock_state"]
+  }
 ];
 
+const visibleReportKeys = reportSections.flatMap((section) => section.keys);
+
+function resolveReportKey(value) {
+  const normalized = String(value || "").trim();
+  return visibleReportKeys.includes(normalized) ? normalized : "income_statement";
+}
+
+function buildFiltersFromSearchParams(searchParams) {
+  const defaults = getInitialFilters();
+  const nextFilters = { ...defaults };
+  const scalarKeys = [
+    "as_of_date",
+    "start_date",
+    "end_date",
+    "budget_id",
+    "category",
+    "warehouse_id",
+    "customer_id",
+    "product_id",
+    "invoice_number",
+    "invoice_status",
+    "detail_limit"
+  ];
+
+  scalarKeys.forEach((key) => {
+    const value = searchParams.get(key);
+
+    if (value !== null && value !== "") {
+      nextFilters[key] = value;
+    }
+  });
+
+  ["warehouse_ids", "customer_ids", "product_ids"].forEach((key) => {
+    const value = searchParams.get(key);
+
+    if (value) {
+      nextFilters[key] = value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+  });
+
+  const lowStockOnly = searchParams.get("low_stock_only");
+  if (lowStockOnly !== null) {
+    nextFilters.low_stock_only =
+      lowStockOnly === "true" || lowStockOnly === "1";
+  }
+
+  return nextFilters;
+}
+
+function buildSearchParamsFromState(reportKey, filters) {
+  const params = new URLSearchParams();
+  params.set("report", reportKey);
+
+  Object.entries(filters || {}).forEach(([key, value]) => {
+    if (Array.isArray(value)) {
+      if (value.length > 0) {
+        params.set(key, value.join(","));
+      }
+      return;
+    }
+
+    if (typeof value === "boolean") {
+      if (value) {
+        params.set(key, "true");
+      }
+      return;
+    }
+
+    if (value !== undefined && value !== null && value !== "") {
+      params.set(key, String(value));
+    }
+  });
+
+  return params;
+}
+
 export default function ReportsPage() {
-  const [activeReport, setActiveReport] = useState("customer_ledger");
-  const [filters, setFilters] = useState(getInitialFilters);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeReport, setActiveReport] = useState(() =>
+    resolveReportKey(searchParams.get("report"))
+  );
+  const [filters, setFilters] = useState(() =>
+    buildFiltersFromSearchParams(searchParams)
+  );
   const [warehouses, setWarehouses] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
+  const [budgets, setBudgets] = useState([]);
   const [loadingLookups, setLoadingLookups] = useState(true);
   const [loadingReport, setLoadingReport] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -1254,6 +1889,26 @@ export default function ReportsPage() {
       [...products].sort((left, right) => compareAlphabetic(left.name, right.name)),
     [products]
   );
+  const sortedBudgets = useMemo(
+    () =>
+      [...budgets].sort((left, right) => {
+        const fiscalYearCompare =
+          Number(right.fiscal_year || 0) - Number(left.fiscal_year || 0);
+
+        if (fiscalYearCompare !== 0) {
+          return fiscalYearCompare;
+        }
+
+        return compareAlphabetic(left.name, right.name);
+      }),
+    [budgets]
+  );
+
+  function syncSearchParams(nextReport = activeReport, nextFilters = filters) {
+    setSearchParams(buildSearchParamsFromState(nextReport, nextFilters), {
+      replace: true
+    });
+  }
 
   async function fetchLookups() {
     try {
@@ -1262,10 +1917,11 @@ export default function ReportsPage() {
       const results = await Promise.allSettled([
         api.get("/warehouses"),
         api.get("/customers"),
-        api.get("/products")
+        api.get("/products"),
+        api.get("/budgets")
       ]);
 
-      const [warehousesRes, customersRes, productsRes] = results;
+      const [warehousesRes, customersRes, productsRes, budgetsRes] = results;
 
       setWarehouses(
         warehousesRes.status === "fulfilled"
@@ -1280,6 +1936,11 @@ export default function ReportsPage() {
       setProducts(
         productsRes.status === "fulfilled"
           ? productsRes.value.data?.data || []
+          : []
+      );
+      setBudgets(
+        budgetsRes.status === "fulfilled"
+          ? budgetsRes.value.data?.data || []
           : []
       );
     } finally {
@@ -1328,11 +1989,13 @@ export default function ReportsPage() {
 
   async function handleApplyFilters(event) {
     event.preventDefault();
+    syncSearchParams(activeReport, filters);
     await loadCurrentReport(activeReport);
   }
 
   async function handleChangeReport(reportKey) {
     setActiveReport(reportKey);
+    syncSearchParams(reportKey, filters);
 
     try {
       setLoadingReport(true);
@@ -1472,6 +2135,15 @@ export default function ReportsPage() {
         subtitle="Centre de sorties pour la gestion, la comptabilite, le commercial et le stock."
       />
 
+      <div className="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+        Les commissions encodees manuellement restent suivies dans
+        <span className="font-semibold"> Journal des depenses </span>
+        et
+        <span className="font-semibold"> Depenses par categorie</span>,
+        en utilisant la categorie <span className="font-semibold">commissions</span>.
+        Le calcul automatique des commissions n'est pas encore active a l'ecran.
+      </div>
+
       {error ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -1479,24 +2151,33 @@ export default function ReportsPage() {
       ) : null}
 
       <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
-        <div className="mb-5 flex flex-wrap gap-3">
-          {visibleReportKeys.map((key) => {
-            const config = reportConfigs[key];
-            return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => handleChangeReport(key)}
-              className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
-                activeReport === key
-                  ? "bg-brand-600 text-white"
-                  : "border border-slate-300 text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              {config.label}
-            </button>
-            );
-          })}
+        <div className="mb-5 space-y-5">
+          {reportSections.map((section) => (
+            <div key={section.title}>
+              <div className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                {section.title}
+              </div>
+              <div className="flex flex-wrap gap-3">
+                {section.keys.map((key) => {
+                  const config = reportConfigs[key];
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => handleChangeReport(key)}
+                      className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                        activeReport === key
+                          ? "bg-brand-600 text-white"
+                          : "border border-slate-300 text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      {config.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
@@ -1571,6 +2252,178 @@ export default function ReportsPage() {
                   {sortedWarehouses.map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.name} - {warehouse.city}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : null}
+
+          {activeReport === "income_statement" ||
+          activeReport === "treasury_statement" ||
+          activeReport === "marketing_ratio" ? (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date debut
+                </label>
+                <input
+                  type="date"
+                  name="start_date"
+                  value={filters.start_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date fin
+                </label>
+                <input
+                  type="date"
+                  name="end_date"
+                  value={filters.end_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {activeReport === "receipts_journal" ||
+          activeReport === "margin_by_city" ||
+          activeReport === "margin_by_customer" ||
+          activeReport === "commission_due" ? (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date debut
+                </label>
+                <input
+                  type="date"
+                  name="start_date"
+                  value={filters.start_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date fin
+                </label>
+                <input
+                  type="date"
+                  name="end_date"
+                  value={filters.end_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Depot
+                </label>
+                <select
+                  name="warehouse_id"
+                  value={filters.warehouse_id}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les depots</option>
+                  {sortedWarehouses.map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name} - {warehouse.city}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Client
+                </label>
+                <select
+                  name="customer_id"
+                  value={filters.customer_id}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les clients</option>
+                  {sortedCustomers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.business_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : null}
+
+          {activeReport === "expenses_journal" ||
+          activeReport === "expenses_by_category" ? (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date debut
+                </label>
+                <input
+                  type="date"
+                  name="start_date"
+                  value={filters.start_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date fin
+                </label>
+                <input
+                  type="date"
+                  name="end_date"
+                  value={filters.end_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Categorie
+                </label>
+                <input
+                  type="text"
+                  name="category"
+                  value={filters.category}
+                  onChange={handleFilterChange}
+                  placeholder="Ex: marketing"
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {activeReport === "budget_vs_actual" ? (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Budget
+                </label>
+                <select
+                  name="budget_id"
+                  value={filters.budget_id}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Selection auto</option>
+                  {sortedBudgets.map((budget) => (
+                    <option key={budget.id} value={budget.id}>
+                      {budget.fiscal_year} - {budget.name}
+                      {budget.warehouse_name ? ` (${budget.warehouse_name})` : ""}
                     </option>
                   ))}
                 </select>

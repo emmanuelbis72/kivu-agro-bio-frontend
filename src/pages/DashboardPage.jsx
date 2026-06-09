@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import api from "../api/axios";
 import SectionTitle from "../components/ui/SectionTitle";
 import StatCard from "../components/ui/StatCard";
@@ -36,6 +37,39 @@ function formatPercent(value) {
 
 function formatDateInput(date) {
   return date.toISOString().split("T")[0];
+}
+
+function buildPathWithQuery(pathname, paramsObject = {}) {
+  const params = new URLSearchParams();
+
+  Object.entries(paramsObject || {}).forEach(([key, value]) => {
+    if (Array.isArray(value)) {
+      const sanitizedValues = value
+        .map((item) => String(item || "").trim())
+        .filter(Boolean);
+
+      if (sanitizedValues.length > 0) {
+        params.set(key, sanitizedValues.join(","));
+      }
+
+      return;
+    }
+
+    if (typeof value === "boolean") {
+      if (value) {
+        params.set(key, "true");
+      }
+
+      return;
+    }
+
+    if (value !== undefined && value !== null && value !== "") {
+      params.set(key, String(value));
+    }
+  });
+
+  const queryString = params.toString();
+  return queryString ? `${pathname}?${queryString}` : pathname;
 }
 
 function formatDate(value) {
@@ -125,6 +159,12 @@ function resolveOptionLabel(options, value, emptyLabel) {
   return options.find((option) => String(option.value) === String(value))?.label || String(value);
 }
 
+function compareAlphabetic(leftValue, rightValue) {
+  return String(leftValue || "").localeCompare(String(rightValue || ""), "fr", {
+    sensitivity: "base"
+  });
+}
+
 function getDefaultFilters() {
   const endDate = new Date();
   const startDate = new Date();
@@ -137,6 +177,34 @@ function getDefaultFilters() {
     product_id: "",
     stock_form: "",
     timeline: "day"
+  };
+}
+
+function getDefaultDirectionFilters() {
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setDate(endDate.getDate() - 179);
+
+  return {
+    start_date: formatDateInput(startDate),
+    end_date: formatDateInput(endDate),
+    warehouse_id: ""
+  };
+}
+
+function getDefaultCollectionFilters() {
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setDate(endDate.getDate() - 89);
+
+  return {
+    start_date: formatDateInput(startDate),
+    end_date: formatDateInput(endDate),
+    warehouse_id: "",
+    customer_id: "",
+    customer_city: "",
+    top_products: "8",
+    top_cities: "8"
   };
 }
 
@@ -220,6 +288,24 @@ function getInvoiceStatusClass(status) {
   return "bg-slate-100 text-slate-700";
 }
 
+function getAccountingStatusClass(status) {
+  const normalized = String(status || "").toLowerCase();
+
+  if (normalized === "posted") {
+    return "bg-emerald-100 text-emerald-700";
+  }
+
+  if (normalized === "error") {
+    return "bg-red-100 text-red-700";
+  }
+
+  if (normalized === "skipped") {
+    return "bg-amber-100 text-amber-700";
+  }
+
+  return "bg-slate-100 text-slate-700";
+}
+
 function getProjectedBalanceClass(value) {
   const numericValue = Number(value || 0);
 
@@ -242,6 +328,21 @@ function FilterField({ label, children }) {
       </label>
       {children}
     </div>
+  );
+}
+
+function CardActionLink({ action }) {
+  if (!action?.to) {
+    return null;
+  }
+
+  return (
+    <Link
+      to={action.to}
+      className="inline-flex rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+    >
+      {action.label || "Voir detail"}
+    </Link>
   );
 }
 
@@ -594,13 +695,17 @@ function HorizontalBarChart({
   helperText = null,
   colorClass = "bg-brand-500",
   valueFormatter = formatNumber,
-  emptyText = "Aucune donnee"
+  emptyText = "Aucune donnee",
+  action = null
 }) {
   const maxValue = Math.max(...rows.map((row) => Number(row[valueKey] || 0)), 0);
 
   return (
     <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
-      <div className="mb-2 text-lg font-semibold text-slate-900">{title}</div>
+      <div className="mb-2 flex items-start justify-between gap-4">
+        <div className="text-lg font-semibold text-slate-900">{title}</div>
+        <CardActionLink action={action} />
+      </div>
       {helperText ? (
         <div className="mb-5 text-sm text-slate-500">{helperText}</div>
       ) : null}
@@ -639,7 +744,7 @@ function HorizontalBarChart({
   );
 }
 
-function SalesPulseChart({ rows }) {
+function SalesPulseChart({ rows, action = null }) {
   const recentRows = rows.slice(-6);
   const maxValue = Math.max(
     ...recentRows.map((row) => Number(row.total_sales || 0)),
@@ -648,8 +753,11 @@ function SalesPulseChart({ rows }) {
 
   return (
     <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
-      <div className="mb-2 text-lg font-semibold text-slate-900">
-        Pulse mensuel des ventes
+      <div className="mb-2 flex items-start justify-between gap-4">
+        <div className="text-lg font-semibold text-slate-900">
+          Pulse mensuel des ventes
+        </div>
+        <CardActionLink action={action} />
       </div>
       <div className="mb-5 text-sm text-slate-500">
         Lecture rapide des 6 derniers mois factures.
@@ -702,7 +810,8 @@ function MultiSeriesLineChart({
   rows,
   series,
   valueFormatter = formatMoney,
-  emptyText = "Aucune tendance disponible"
+  emptyText = "Aucune tendance disponible",
+  action = null
 }) {
   const chartRows = Array.isArray(rows) ? rows : [];
   const activeSeries = Array.isArray(series) ? series.filter(Boolean) : [];
@@ -742,7 +851,10 @@ function MultiSeriesLineChart({
 
   return (
     <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
-      <div className="mb-2 text-lg font-semibold text-slate-900">{title}</div>
+      <div className="mb-2 flex items-start justify-between gap-4">
+        <div className="text-lg font-semibold text-slate-900">{title}</div>
+        <CardActionLink action={action} />
+      </div>
       {subtitle ? (
         <div className="mb-5 text-sm text-slate-500">{subtitle}</div>
       ) : null}
@@ -846,7 +958,8 @@ function DualMetricRankingChart({
   primaryColor = "bg-brand-500",
   secondaryColor = "bg-emerald-500",
   valueFormatter = formatMoney,
-  emptyText = "Aucune donnee"
+  emptyText = "Aucune donnee",
+  action = null
 }) {
   const maxValue = Math.max(
     ...rows.flatMap((row) => [
@@ -858,7 +971,10 @@ function DualMetricRankingChart({
 
   return (
     <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
-      <div className="mb-2 text-lg font-semibold text-slate-900">{title}</div>
+      <div className="mb-2 flex items-start justify-between gap-4">
+        <div className="text-lg font-semibold text-slate-900">{title}</div>
+        <CardActionLink action={action} />
+      </div>
       {subtitle ? (
         <div className="mb-5 text-sm text-slate-500">{subtitle}</div>
       ) : null}
@@ -917,6 +1033,200 @@ function DualMetricRankingChart({
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ParetoChart({
+  title,
+  subtitle,
+  rows,
+  emptyText = "Aucune analyse Pareto disponible",
+  action = null
+}) {
+  const maxValue = Math.max(...rows.map((row) => Number(row.total_sales_amount || 0)), 0);
+
+  return (
+    <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+      <div className="mb-2 flex items-start justify-between gap-4">
+        <div className="text-lg font-semibold text-slate-900">{title}</div>
+        <CardActionLink action={action} />
+      </div>
+      {subtitle ? <div className="mb-5 text-sm text-slate-500">{subtitle}</div> : null}
+
+      {rows.length === 0 ? (
+        <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+          {emptyText}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {rows.map((row) => {
+            const salesAmount = Number(row.total_sales_amount || 0);
+            const width = maxValue > 0 ? Math.max((salesAmount / maxValue) * 100, 2) : 0;
+            const cumulativeShare = Number(row.cumulative_sales_share_percent || 0);
+
+            return (
+              <div key={row.product_id} className="space-y-2">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      {row.rank_order}. {row.product_name}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {row.category || "Categorie non renseignee"}
+                    </div>
+                  </div>
+                  <div className="text-right text-xs text-slate-500">
+                    <div>{formatMoney(salesAmount)}</div>
+                    <div>Cumul {formatPercent(cumulativeShare)}</div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="h-3 rounded-full bg-slate-100">
+                    <div
+                      className="h-3 rounded-full bg-brand-500"
+                      style={{ width: `${width}%` }}
+                    />
+                  </div>
+                  <div className="h-2 rounded-full bg-slate-100">
+                    <div
+                      className="h-2 rounded-full bg-emerald-500"
+                      style={{ width: `${Math.min(cumulativeShare, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PointOfSaleCoverageMap({
+  title,
+  subtitle,
+  rows,
+  emptyText = "Aucune couverture geographique disponible",
+  action = null
+}) {
+  const positions = {
+    Kinshasa: { x: 26, y: 58 },
+    Lubumbashi: { x: 63, y: 78 },
+    Kolwezi: { x: 52, y: 69 },
+    Goma: { x: 79, y: 44 },
+    Bukavu: { x: 74, y: 52 },
+    Matadi: { x: 18, y: 63 },
+    Johannesburg: { x: 56, y: 94 }
+  };
+
+  const plottedRows = rows
+    .map((row) => {
+      const cityName = String(row.city || row.warehouse_city || "").trim();
+      const positionKey =
+        Object.keys(positions).find(
+          (key) => key.toLowerCase() === cityName.toLowerCase()
+        ) || null;
+
+      return positionKey
+        ? {
+            ...row,
+            position: positions[positionKey],
+            display_city: positionKey
+          }
+        : null;
+    })
+    .filter(Boolean);
+
+  const maxSales = Math.max(
+    ...plottedRows.map((row) => Number(row.total_sales_amount || 0)),
+    0
+  );
+
+  return (
+    <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+      <div className="mb-2 flex items-start justify-between gap-4">
+        <div className="text-lg font-semibold text-slate-900">{title}</div>
+        <CardActionLink action={action} />
+      </div>
+      {subtitle ? <div className="mb-5 text-sm text-slate-500">{subtitle}</div> : null}
+
+      {plottedRows.length === 0 ? (
+        <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+          {emptyText}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+          <div className="rounded-3xl border border-emerald-100 bg-[radial-gradient(circle_at_top,#ecfdf5,transparent_55%),linear-gradient(180deg,#f8fafc_0%,#ecfeff_100%)] p-4">
+            <svg viewBox="0 0 100 100" className="h-[320px] w-full">
+              <rect x="10" y="10" width="80" height="80" rx="12" fill="#E2FBE8" />
+              <path
+                d="M26 24 L47 18 L70 23 L82 40 L78 61 L67 76 L49 83 L31 77 L21 59 L19 38 Z"
+                fill="#BBF7D0"
+                stroke="#22C55E"
+                strokeWidth="1.4"
+              />
+
+              {plottedRows.map((row) => {
+                const radius =
+                  maxSales > 0
+                    ? 4 + (Number(row.total_sales_amount || 0) / maxSales) * 8
+                    : 5;
+
+                return (
+                  <g key={row.display_city}>
+                    <circle
+                      cx={row.position.x}
+                      cy={row.position.y}
+                      r={radius}
+                      fill="#0F766E"
+                      fillOpacity="0.78"
+                      stroke="#ECFDF5"
+                      strokeWidth="1.5"
+                    >
+                      <title>
+                        {`${row.display_city} • ${formatMoney(
+                          row.total_sales_amount
+                        )} • ${Number(row.total_customers || 0)} point(s)`}
+                      </title>
+                    </circle>
+                    <text
+                      x={row.position.x}
+                      y={row.position.y - radius - 2}
+                      textAnchor="middle"
+                      fontSize="4"
+                      fontWeight="700"
+                      fill="#065F46"
+                    >
+                      {row.display_city}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+
+          <div className="space-y-3">
+            {plottedRows.map((row) => (
+              <div
+                key={`legend-${row.display_city}`}
+                className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3"
+              >
+                <div className="text-sm font-semibold text-slate-800">
+                  {row.display_city}
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {formatMoney(row.total_sales_amount)} •{" "}
+                  {Number(row.total_customers || 0)} point(s) •{" "}
+                  {Number(row.total_invoices || 0)} facture(s)
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -1059,7 +1369,8 @@ function TimelineChart({
   title,
   rows,
   valueFormatter = formatNumber,
-  emptyText = "Aucune variation sur la periode"
+  emptyText = "Aucune variation sur la periode",
+  action = null
 }) {
   const maxValue = Math.max(
     ...rows.map((row) =>
@@ -1074,7 +1385,10 @@ function TimelineChart({
 
   return (
     <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
-      <div className="mb-2 text-lg font-semibold text-slate-900">{title}</div>
+      <div className="mb-2 flex items-start justify-between gap-4">
+        <div className="text-lg font-semibold text-slate-900">{title}</div>
+        <CardActionLink action={action} />
+      </div>
       <div className="mb-5 flex flex-wrap gap-4 text-xs text-slate-500">
         <span className="inline-flex items-center gap-2">
           <span className="h-3 w-3 rounded-full bg-emerald-500" />
@@ -1142,6 +1456,7 @@ function TimelineChart({
 
 const tabItems = [
   { key: "direction", label: "Direction" },
+  { key: "recouvrement", label: "Recouvrement" },
   { key: "commercial", label: "Commercial" },
   { key: "stock", label: "Stock" },
   { key: "variations", label: "Variations" }
@@ -1149,12 +1464,19 @@ const tabItems = [
 
 export default function DashboardPage() {
   const [overviewData, setOverviewData] = useState(null);
+  const [directionData, setDirectionData] = useState(null);
+  const [collectionData, setCollectionData] = useState(null);
   const [commercialData, setCommercialData] = useState(null);
   const [accountingData, setAccountingData] = useState(null);
   const [variationData, setVariationData] = useState(null);
+  const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [filters, setFilters] = useState(getDefaultFilters);
+  const [directionFilters, setDirectionFilters] = useState(getDefaultDirectionFilters);
+  const [collectionFilters, setCollectionFilters] = useState(
+    getDefaultCollectionFilters
+  );
   const [heatmapFilters, setHeatmapFilters] = useState(() =>
     getDefaultCommercialHeatmapFilters({
       periodDays: "365",
@@ -1165,6 +1487,8 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("direction");
   const [loading, setLoading] = useState(true);
   const [reportLoading, setReportLoading] = useState(false);
+  const [directionLoading, setDirectionLoading] = useState(false);
+  const [collectionLoading, setCollectionLoading] = useState(false);
   const [commercialRefreshing, setCommercialRefreshing] = useState(false);
   const [error, setError] = useState("");
 
@@ -1187,11 +1511,53 @@ export default function DashboardPage() {
     setCommercialData(response.data?.data || null);
   }
 
-  async function fetchContextData(currentHeatmapFilters = heatmapFilters) {
+  async function fetchExecutiveAnalytics(currentDirectionFilters = directionFilters) {
+    const params = new URLSearchParams();
+    params.set("top_limit", "8");
+
+    Object.entries(currentDirectionFilters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        params.set(key, value);
+      }
+    });
+
+    const response = await api.get(
+      `/dashboard/executive-analytics?${params.toString()}`
+    );
+    setDirectionData(response.data?.data || null);
+  }
+
+  async function fetchCollectionsOverview(
+    currentCollectionFilters = collectionFilters
+  ) {
+    const params = new URLSearchParams();
+
+    Object.entries(currentCollectionFilters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        params.set(key, value);
+      }
+    });
+
+    const response = await api.get(
+      `/dashboard/collections-overview?${params.toString()}`
+    );
+    setCollectionData(response.data?.data || null);
+  }
+
+  async function fetchContextData(
+    currentHeatmapFilters = heatmapFilters,
+    currentCollectionFilters = collectionFilters
+  ) {
     const results = await Promise.allSettled([
       api.get("/dashboard/overview?top_limit=8&recent_limit=8"),
+      api.get(
+        `/dashboard/collections-overview?${new URLSearchParams(
+          currentCollectionFilters
+        ).toString()}`
+      ),
       api.get(buildCommercialOverviewPath(currentHeatmapFilters)),
       api.get("/dashboard/accounting-overview?recent_limit=8"),
+      api.get("/customers"),
       api.get("/products"),
       api.get("/warehouses")
     ]);
@@ -1199,8 +1565,10 @@ export default function DashboardPage() {
     const errors = [];
     const [
       overviewResult,
+      collectionResult,
       commercialResult,
       accountingResult,
+      customersResult,
       productsResult,
       warehousesResult
     ] = results;
@@ -1210,6 +1578,13 @@ export default function DashboardPage() {
     } else {
       setOverviewData(null);
       errors.push("vue executif");
+    }
+
+    if (collectionResult.status === "fulfilled") {
+      setCollectionData(collectionResult.value.data?.data || null);
+    } else {
+      setCollectionData(null);
+      errors.push("vue recouvrement");
     }
 
     if (commercialResult.status === "fulfilled") {
@@ -1224,6 +1599,13 @@ export default function DashboardPage() {
     } else {
       setAccountingData(null);
       errors.push("vue comptable");
+    }
+
+    if (customersResult.status === "fulfilled") {
+      setCustomers(customersResult.value.data?.data || []);
+    } else {
+      setCustomers([]);
+      errors.push("clients");
     }
 
     if (productsResult.status === "fulfilled") {
@@ -1264,15 +1646,20 @@ export default function DashboardPage() {
 
   async function fetchDashboard(
     initialFilters = filters,
-    currentHeatmapFilters = heatmapFilters
+    currentHeatmapFilters = heatmapFilters,
+    currentDirectionFilters = directionFilters,
+    currentCollectionFilters = collectionFilters
   ) {
     try {
       setLoading(true);
       setError("");
 
-      const [contextErrors, variationResult] = await Promise.all([
-        fetchContextData(currentHeatmapFilters),
+      const [contextErrors, variationResult, directionResult] = await Promise.all([
+        fetchContextData(currentHeatmapFilters, currentCollectionFilters),
         fetchStockVariationReport(initialFilters)
+          .then(() => ({ ok: true }))
+          .catch((err) => ({ ok: false, err })),
+        fetchExecutiveAnalytics(currentDirectionFilters)
           .then(() => ({ ok: true }))
           .catch((err) => ({ ok: false, err }))
       ]);
@@ -1282,6 +1669,11 @@ export default function DashboardPage() {
       if (!variationResult.ok) {
         setVariationData(null);
         errors.push("rapport des variations");
+      }
+
+      if (!directionResult.ok) {
+        setDirectionData(null);
+        errors.push("analyse DG");
       }
 
       if (errors.length > 0) {
@@ -1307,7 +1699,7 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    fetchDashboard(filters);
+    fetchDashboard(filters, heatmapFilters, directionFilters, collectionFilters);
   }, []);
 
   async function handleApplyFilters(event) {
@@ -1333,6 +1725,58 @@ export default function DashboardPage() {
       ...prev,
       [name]: value
     }));
+  }
+
+  function handleDirectionFilterChange(event) {
+    const { name, value } = event.target;
+    setDirectionFilters((prev) => ({
+      ...prev,
+      [name]: value
+    }));
+  }
+
+  function handleCollectionFilterChange(event) {
+    const { name, value } = event.target;
+    setCollectionFilters((prev) => ({
+      ...prev,
+      [name]: value
+    }));
+  }
+
+  async function handleApplyCollectionFilters(event) {
+    event.preventDefault();
+
+    try {
+      setCollectionLoading(true);
+      setError("");
+      await fetchCollectionsOverview(collectionFilters);
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de charger le suivi recouvrement."
+      );
+    } finally {
+      setCollectionLoading(false);
+    }
+  }
+
+  async function handleApplyDirectionFilters(event) {
+    event.preventDefault();
+
+    try {
+      setDirectionLoading(true);
+      setError("");
+      await fetchExecutiveAnalytics(directionFilters);
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de charger l'analyse DG filtree."
+      );
+    } finally {
+      setDirectionLoading(false);
+    }
   }
 
   function handleHeatmapFilterChange(event) {
@@ -1387,6 +1831,47 @@ export default function DashboardPage() {
 
   const stats = overviewData?.global_stats || {};
   const executiveSnapshot = overviewData?.executive_kpi_snapshot || {};
+  const directionAnalytics = directionData || {};
+  const directionMonthlyRevenueTrend =
+    directionAnalytics?.monthly_revenue_trend || [];
+  const directionCollectionsTrend =
+    directionAnalytics?.collections_vs_invoices_trend || [];
+  const directionForecastVsActual = directionAnalytics?.ai_forecast_vs_actual || {
+    rows: []
+  };
+  const directionSalesByCity = directionAnalytics?.sales_by_city || [];
+  const directionSalesByPointOfSale =
+    directionAnalytics?.sales_by_point_of_sale || [];
+  const directionSalesByWarehouse =
+    directionAnalytics?.sales_by_warehouse || [];
+  const directionProductPareto = directionAnalytics?.product_pareto || [];
+  const directionNetMarginByProduct =
+    directionAnalytics?.net_margin_by_product || [];
+  const directionPointMap = directionAnalytics?.point_of_sale_map || [];
+  const directionHeatmap = directionAnalytics?.product_city_heatmap || {
+    products: [],
+    cities: [],
+    cells: []
+  };
+  const directionStockCoverage = directionAnalytics?.stock_coverage || [];
+  const directionReceivablesAging = directionAnalytics?.receivables_aging || {
+    summary: {},
+    buckets: [],
+    overdue_customers: []
+  };
+  const collectionOverview = collectionData || {};
+  const collectionSummary = collectionOverview.summary || {};
+  const collectionUnpaidInvoices = collectionOverview.unpaid_invoices || [];
+  const collectionPayments = collectionOverview.payments || [];
+  const collectionHeatmap = collectionOverview.product_city_heatmap || {
+    products: [],
+    cities: [],
+    cells: []
+  };
+  const directionExpensesByCategory =
+    directionAnalytics?.expenses_by_category || [];
+  const directionExpenseScopeNote =
+    directionAnalytics?.filters?.expenses_scope_note || "";
   const customerBalanceBoard = overviewData?.customer_balance_board || {
     rows: [],
     totals: {}
@@ -1410,6 +1895,22 @@ export default function DashboardPage() {
   const heatmapWarehouseOptions = useMemo(
     () => buildAlphabeticalOptions(warehouses, "id", "name"),
     [warehouses]
+  );
+  const sortedDashboardCustomers = useMemo(
+    () =>
+      [...customers].sort((left, right) =>
+        compareAlphabetic(left.business_name, right.business_name)
+      ),
+    [customers]
+  );
+  const customerCityOptions = useMemo(
+    () =>
+      [...new Set(
+        customers
+          .map((customer) => String(customer.city || "").trim())
+          .filter(Boolean)
+      )].sort((left, right) => compareAlphabetic(left, right)),
+    [customers]
   );
   const heatmapChainOptions = useMemo(
     () => buildAlphabeticalOptions(commercialChains, "chain_name"),
@@ -1451,6 +1952,17 @@ export default function DashboardPage() {
       heatmapWarehouseOptions
     ]
   );
+  const commercialDateRange = useMemo(() => {
+    const endDate = new Date();
+    const lookbackDays = Math.max(Number(heatmapFilters.days || 365), 1);
+    const startDate = new Date(endDate);
+    startDate.setDate(endDate.getDate() - (lookbackDays - 1));
+
+    return {
+      start_date: formatDateInput(startDate),
+      end_date: formatDateInput(endDate)
+    };
+  }, [heatmapFilters.days]);
   const accountingStats = accountingData?.accounting_global_stats || {};
   const accountingHealth = accountingData?.accounting_health || {};
   const cashSummary = accountingData?.cash_forecast?.summary || {};
@@ -1473,6 +1985,331 @@ export default function DashboardPage() {
   );
   const topPayingCustomers = commercialData?.top_paying_customers || [];
   const mostProfitableProducts = commercialData?.most_profitable_products || [];
+  const directionMonthlyRevenueSeries = useMemo(
+    () => [
+      { key: "invoiced_amount", label: "CA facture", color: "#2563EB" }
+    ],
+    []
+  );
+  const directionCollectionsSeries = useMemo(
+    () => [
+      { key: "invoiced_amount", label: "Factures emises", color: "#2563EB" },
+      { key: "payments_received", label: "Encaissements", color: "#059669" }
+    ],
+    []
+  );
+  const directionForecastSeries = useMemo(
+    () => [
+      { key: "invoiced_amount", label: "Ventes reelles", color: "#2563EB" },
+      { key: "ai_sales_forecast_amount", label: "Prevision IA", color: "#7C3AED" }
+    ],
+    []
+  );
+  const selectedCollectionCustomer = useMemo(
+    () =>
+      sortedDashboardCustomers.find(
+        (customer) =>
+          String(customer.id) === String(collectionFilters.customer_id)
+      ) || null,
+    [collectionFilters.customer_id, sortedDashboardCustomers]
+  );
+  const collectionHeatmapSummaryItems = useMemo(
+    () => [
+      {
+        label: "Periode",
+        value: formatPeriodRange(
+          collectionFilters.start_date,
+          collectionFilters.end_date
+        )
+      },
+      {
+        label: "Depot",
+        value:
+          warehouses.find(
+            (warehouse) =>
+              String(warehouse.id) === String(collectionFilters.warehouse_id)
+          )?.name || "Tous les depots"
+      },
+      {
+        label: "Client",
+        value: selectedCollectionCustomer?.business_name || "Tous les clients"
+      },
+      {
+        label: "Ville",
+        value: collectionFilters.customer_city || "Toutes les villes"
+      },
+      {
+        label: "Produits retenus",
+        value: `${collectionHeatmap.products?.length || 0} / ${Number(
+          collectionHeatmap.filters?.top_products || collectionFilters.top_products || 0
+        )}`
+      },
+      {
+        label: "Villes retenues",
+        value: `${collectionHeatmap.cities?.length || 0} / ${Number(
+          collectionHeatmap.filters?.top_cities || collectionFilters.top_cities || 0
+        )}`
+      },
+      {
+        label: "Cellules actives",
+        value: `${(collectionHeatmap.cells || []).filter(
+          (cell) =>
+            Number(cell?.total_sales_amount || 0) !== 0 ||
+            Number(cell?.total_quantity_sold || 0) !== 0 ||
+            Number(cell?.gross_profit_amount || 0) !== 0
+        ).length} / ${(collectionHeatmap.cells || []).length}`
+      }
+    ],
+    [
+      collectionFilters.customer_city,
+      collectionFilters.end_date,
+      collectionFilters.start_date,
+      collectionFilters.top_cities,
+      collectionFilters.top_products,
+      collectionFilters.warehouse_id,
+      collectionHeatmap,
+      selectedCollectionCustomer,
+      warehouses
+    ]
+  );
+  function buildDirectionReportPath(reportKey, extraParams = {}) {
+    const sharedParams = {
+      start_date: directionFilters.start_date,
+      end_date: directionFilters.end_date
+    };
+
+    if (reportKey === "customer_aging") {
+      return buildPathWithQuery("/reports", {
+        report: reportKey,
+        as_of_date: directionFilters.end_date,
+        warehouse_id: directionFilters.warehouse_id || undefined,
+        ...extraParams
+      });
+    }
+
+    if (reportKey === "product_sales") {
+      return buildPathWithQuery("/reports", {
+        report: reportKey,
+        ...sharedParams,
+        warehouse_ids: directionFilters.warehouse_id
+          ? [directionFilters.warehouse_id]
+          : [],
+        ...extraParams
+      });
+    }
+
+    if (reportKey === "stock_state") {
+      return buildPathWithQuery("/reports", {
+        report: reportKey,
+        warehouse_id: directionFilters.warehouse_id || undefined,
+        ...extraParams
+      });
+    }
+
+    return buildPathWithQuery("/reports", {
+      report: reportKey,
+      ...sharedParams,
+      warehouse_id: directionFilters.warehouse_id || undefined,
+      ...extraParams
+    });
+  }
+
+  function buildCommercialReportPath(reportKey, extraParams = {}) {
+    const sharedParams = {
+      start_date: commercialDateRange.start_date,
+      end_date: commercialDateRange.end_date
+    };
+
+    if (reportKey === "customer_aging") {
+      return buildPathWithQuery("/reports", {
+        report: reportKey,
+        as_of_date: commercialDateRange.end_date,
+        warehouse_id: heatmapFilters.warehouse_id || undefined,
+        ...extraParams
+      });
+    }
+
+    if (reportKey === "product_sales") {
+      return buildPathWithQuery("/reports", {
+        report: reportKey,
+        ...sharedParams,
+        warehouse_ids: heatmapFilters.warehouse_id
+          ? [heatmapFilters.warehouse_id]
+          : [],
+        ...extraParams
+      });
+    }
+
+    return buildPathWithQuery("/reports", {
+      report: reportKey,
+      ...sharedParams,
+      warehouse_id: heatmapFilters.warehouse_id || undefined,
+      ...extraParams
+    });
+  }
+
+  function buildCollectionsReportPath(reportKey, extraParams = {}) {
+    const sharedParams = {
+      start_date: collectionFilters.start_date,
+      end_date: collectionFilters.end_date
+    };
+
+    if (reportKey === "customer_aging") {
+      return buildPathWithQuery("/reports", {
+        report: reportKey,
+        as_of_date: collectionFilters.end_date,
+        warehouse_id: collectionFilters.warehouse_id || undefined,
+        customer_id: collectionFilters.customer_id || undefined,
+        ...extraParams
+      });
+    }
+
+    if (reportKey === "receipts_journal") {
+      return buildPathWithQuery("/reports", {
+        report: reportKey,
+        ...sharedParams,
+        warehouse_id: collectionFilters.warehouse_id || undefined,
+        customer_id: collectionFilters.customer_id || undefined,
+        ...extraParams
+      });
+    }
+
+    return buildPathWithQuery("/reports", {
+      report: reportKey,
+      ...sharedParams,
+      warehouse_id: collectionFilters.warehouse_id || undefined,
+      customer_id: collectionFilters.customer_id || undefined,
+      ...extraParams
+    });
+  }
+
+  const directionChartActions = useMemo(
+    () => ({
+      executiveComparison: {
+        to: buildDirectionReportPath("treasury_statement"),
+        label: "Voir etat"
+      },
+      salesPulse: {
+        to: buildDirectionReportPath("income_statement"),
+        label: "Voir etat"
+      },
+      topCustomers: {
+        to: buildDirectionReportPath("customer_ledger"),
+        label: "Voir clients"
+      },
+      revenueTrend: {
+        to: buildDirectionReportPath("income_statement"),
+        label: "Voir etat"
+      },
+      collectionsTrend: {
+        to: buildDirectionReportPath("receipts_journal"),
+        label: "Voir detail"
+      },
+      salesByCity: {
+        to: buildDirectionReportPath("margin_by_city"),
+        label: "Voir villes"
+      },
+      salesByCustomer: {
+        to: buildDirectionReportPath("margin_by_customer"),
+        label: "Voir clients"
+      },
+      productPareto: {
+        to: buildDirectionReportPath("product_sales"),
+        label: "Voir produits"
+      },
+      productMargin: {
+        to: buildDirectionReportPath("product_sales"),
+        label: "Voir produits"
+      },
+      pointMap: {
+        to: buildDirectionReportPath("margin_by_customer"),
+        label: "Voir points"
+      },
+      heatmap: {
+        to: buildDirectionReportPath("product_sales"),
+        label: "Voir detail"
+      },
+      stockCoverage: {
+        to: buildDirectionReportPath("stock_state"),
+        label: "Voir stock"
+      },
+      expensesByCategory: {
+        to: buildDirectionReportPath("expenses_by_category"),
+        label: "Voir depenses"
+      },
+      receivablesAging: {
+        to: buildDirectionReportPath("customer_aging"),
+        label: "Voir creances"
+      },
+      forecastVsActual: {
+        to: "/ai-reasoning",
+        label: "Voir IA"
+      }
+    }),
+    [directionFilters]
+  );
+  const commercialChartActions = useMemo(
+    () => ({
+      salesByCity: {
+        to: buildCommercialReportPath("margin_by_city"),
+        label: "Voir villes"
+      },
+      salesByChain: {
+        to: "/commercial-dashboard",
+        label: "Voir detail"
+      },
+      chainCollections: {
+        to: "/commercial-dashboard",
+        label: "Voir detail"
+      },
+      channelProfit: {
+        to: "/commercial-dashboard",
+        label: "Voir detail"
+      },
+      salesByChannel: {
+        to: "/commercial-dashboard",
+        label: "Voir detail"
+      },
+      topProducts: {
+        to: buildCommercialReportPath("product_sales"),
+        label: "Voir produits"
+      },
+      heatmap: {
+        to: buildCommercialReportPath("product_sales"),
+        label: "Voir detail"
+      },
+      customerSalesTrend: {
+        to: buildCommercialReportPath("customer_ledger"),
+        label: "Voir clients"
+      },
+      customerPaymentsTrend: {
+        to: buildCommercialReportPath("receipts_journal"),
+        label: "Voir encaissements"
+      },
+      topPayers: {
+        to: buildCommercialReportPath("customer_ledger"),
+        label: "Voir clients"
+      }
+    }),
+    [commercialDateRange, heatmapFilters.warehouse_id]
+  );
+  const collectionChartActions = useMemo(
+    () => ({
+      unpaidInvoices: {
+        to: buildCollectionsReportPath("customer_aging"),
+        label: "Voir creances"
+      },
+      payments: {
+        to: buildCollectionsReportPath("receipts_journal"),
+        label: "Voir paiements"
+      },
+      heatmap: {
+        to: buildCollectionsReportPath("product_sales"),
+        label: "Voir detail"
+      }
+    }),
+    [collectionFilters]
+  );
   const commercialLeaderSignals = useMemo(
     () => [
       {
@@ -1780,6 +2617,75 @@ export default function DashboardPage() {
 
       {activeTab === "direction" ? (
         <div className="space-y-8">
+          <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+            <div className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+              <div>
+                <div className="text-lg font-semibold text-slate-900">
+                  Analyse DG prioritaire
+                </div>
+                <div className="mt-1 text-sm text-slate-500">
+                  Filtres communs pour les graphes de pilotage: ventes, recouvrement, marge, stock, creances et depenses.
+                </div>
+              </div>
+              {directionExpenseScopeNote ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 xl:max-w-md">
+                  {directionExpenseScopeNote}
+                </div>
+              ) : null}
+            </div>
+
+            <form
+              onSubmit={handleApplyDirectionFilters}
+              className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
+            >
+              <FilterField label="Date debut">
+                <input
+                  type="date"
+                  name="start_date"
+                  value={directionFilters.start_date}
+                  onChange={handleDirectionFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </FilterField>
+
+              <FilterField label="Date fin">
+                <input
+                  type="date"
+                  name="end_date"
+                  value={directionFilters.end_date}
+                  onChange={handleDirectionFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </FilterField>
+
+              <FilterField label="Depot">
+                <select
+                  name="warehouse_id"
+                  value={directionFilters.warehouse_id}
+                  onChange={handleDirectionFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les depots</option>
+                  {warehouses.map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name} - {warehouse.city}
+                    </option>
+                  ))}
+                </select>
+              </FilterField>
+
+              <div className="flex items-end">
+                <button
+                  type="submit"
+                  disabled={directionLoading}
+                  className="rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {directionLoading ? "Chargement..." : "Appliquer"}
+                </button>
+              </div>
+            </form>
+          </div>
+
           <ExecutiveKpiSnapshotSection snapshot={executiveSnapshot} />
 
           <MultiSeriesLineChart
@@ -1789,9 +2695,219 @@ export default function DashboardPage() {
             series={executiveComparisonSeries}
             valueFormatter={formatMoney}
             emptyText="Aucune serie executive disponible"
+            action={directionChartActions.executiveComparison}
           />
 
-          <SalesPulseChart rows={overviewData?.sales_overview || []} />
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <MultiSeriesLineChart
+              title="Courbe du chiffre d'affaires mensuel"
+              subtitle="Voir la croissance ou le ralentissement sur la periode filtree."
+              rows={directionMonthlyRevenueTrend}
+              series={directionMonthlyRevenueSeries}
+              valueFormatter={formatMoney}
+              emptyText="Aucune courbe de chiffre d'affaires disponible"
+              action={directionChartActions.revenueTrend}
+            />
+
+            <MultiSeriesLineChart
+              title="Encaissements contre factures emises"
+              subtitle="Detecter rapidement un probleme de recouvrement par ecart entre facture et cash."
+              rows={directionCollectionsTrend}
+              series={directionCollectionsSeries}
+              valueFormatter={formatMoney}
+              emptyText="Aucune comparaison factures / encaissements disponible"
+              action={directionChartActions.collectionsTrend}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <HorizontalBarChart
+              title="Ventes par ville"
+              rows={directionSalesByCity}
+              labelKey="city"
+              valueKey="total_sales_amount"
+              helperText="Identifier les marches les plus performants."
+              colorClass="bg-emerald-500"
+              valueFormatter={formatMoney}
+              emptyText="Aucune vente par ville sur la periode"
+              action={directionChartActions.salesByCity}
+            />
+
+            <HorizontalBarChart
+              title="Ventes par point de vente"
+              rows={directionSalesByPointOfSale}
+              labelKey="business_name"
+              valueKey="total_sales_amount"
+              helperText="Prioriser les magasins et pharmacies a suivre."
+              colorClass="bg-brand-500"
+              valueFormatter={formatMoney}
+              emptyText="Aucun point de vente sur la periode"
+              action={directionChartActions.salesByCustomer}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <ParetoChart
+              title="Diagramme de Pareto des produits"
+              subtitle="Identifier les references qui portent l'essentiel du chiffre d'affaires."
+              rows={directionProductPareto}
+              action={directionChartActions.productPareto}
+            />
+
+            <HorizontalBarChart
+              title="Marge nette estimee par produit"
+              rows={directionNetMarginByProduct}
+              labelKey="product_name"
+              valueKey="net_profit_estimate"
+              helperText="Eviter de pousser des produits qui paraissent actifs mais qui rapportent peu apres allocation des charges de periode."
+              colorClass="bg-emerald-500"
+              valueFormatter={formatMoney}
+              emptyText="Aucune marge produit disponible"
+              action={directionChartActions.productMargin}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <PointOfSaleCoverageMap
+              title="Carte geographique des points de vente"
+              subtitle="Visualiser la couverture territoriale active sur les villes servies."
+              rows={directionPointMap}
+              action={directionChartActions.pointMap}
+            />
+
+            <ProductCityHeatmap
+              title="Heatmap produit x ville"
+              subtitle="Voir quels produits fonctionnent le mieux dans quelles villes."
+              data={directionHeatmap}
+              filterSummary={{
+                periodLabel: formatPeriodRange(
+                  directionFilters.start_date,
+                  directionFilters.end_date
+                ),
+                warehouseLabel:
+                  warehouses.find(
+                    (warehouse) =>
+                      String(warehouse.id) === String(directionFilters.warehouse_id)
+                  )?.name || "Tous les depots",
+                chainLabel: "Toutes les chaines",
+                channelLabel: "Tous les canaux"
+              }}
+              formatMoney={formatMoney}
+              formatNumber={formatNumber}
+              formatPercent={formatPercent}
+              emptyText="Aucune heatmap produit x ville disponible"
+              action={directionChartActions.heatmap}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <HorizontalBarChart
+              title="Couverture des stocks"
+              rows={directionStockCoverage}
+              labelKey="product_name"
+              valueKey="coverage_days"
+              helperText="Anticiper les ruptures avec le nombre estimatif de jours de couverture par produit."
+              colorClass="bg-amber-500"
+              valueFormatter={(value) =>
+                value === null || value === undefined ? "-" : `${formatNumber(value)} j`
+              }
+              emptyText="Aucune couverture stock exploitable"
+              action={directionChartActions.stockCoverage}
+            />
+
+            <HorizontalBarChart
+              title="Depenses par categorie"
+              rows={directionExpensesByCategory}
+              labelKey="category"
+              valueKey="total_amount"
+              helperText="Comprendre ou part l'argent sur la periode."
+              colorClass="bg-rose-500"
+              valueFormatter={formatMoney}
+              emptyText="Aucune depense sur la periode"
+              action={directionChartActions.expensesByCategory}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <HorizontalBarChart
+              title="Balance agee des creances"
+              rows={directionReceivablesAging.buckets || []}
+              labelKey="label"
+              valueKey="amount"
+              helperText="Identifier les paiements en retard par tranche d'anciennete."
+              colorClass="bg-amber-500"
+              valueFormatter={formatMoney}
+              emptyText="Aucune creance ouverte"
+              action={directionChartActions.receivablesAging}
+            />
+
+            <MultiSeriesLineChart
+              title="Prevision IA contre ventes reelles"
+              subtitle="Comparer les ventes facturees a la derniere baseline IA disponible."
+              rows={directionForecastVsActual.rows || []}
+              series={directionForecastSeries}
+              valueFormatter={formatMoney}
+              emptyText="Aucune comparaison prevision IA / ventes disponible"
+              action={directionChartActions.forecastVsActual}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <TableCard
+              title="Clients les plus en retard"
+              rows={directionReceivablesAging.overdue_customers || []}
+              emptyText="Aucun client en retard"
+              columns={[
+                { key: "business_name", label: "Client" },
+                { key: "city", label: "Ville" },
+                {
+                  key: "open_invoices_count",
+                  label: "Factures",
+                  render: (row) => formatNumber(row.open_invoices_count)
+                },
+                {
+                  key: "max_days_overdue",
+                  label: "Retard max",
+                  render: (row) => `${Number(row.max_days_overdue || 0)} j`
+                },
+                {
+                  key: "total_balance_due",
+                  label: "Solde",
+                  render: (row) => formatMoney(row.total_balance_due)
+                }
+              ]}
+            />
+
+            <TableCard
+              title="Performance par depot"
+              rows={directionSalesByWarehouse}
+              emptyText="Aucune performance depot disponible"
+              columns={[
+                { key: "warehouse_name", label: "Depot" },
+                { key: "warehouse_city", label: "Ville" },
+                {
+                  key: "total_sales_amount",
+                  label: "CA",
+                  render: (row) => formatMoney(row.total_sales_amount)
+                },
+                {
+                  key: "total_collected_amount",
+                  label: "Encaisse",
+                  render: (row) => formatMoney(row.total_collected_amount)
+                },
+                {
+                  key: "gross_profit_amount",
+                  label: "Profit brut",
+                  render: (row) => formatMoney(row.gross_profit_amount)
+                }
+              ]}
+            />
+          </div>
+
+          <SalesPulseChart
+            rows={overviewData?.sales_overview || []}
+            action={directionChartActions.salesPulse}
+          />
 
           <CustomerBalanceBoardTable board={customerBalanceBoard} />
 
@@ -1808,6 +2924,7 @@ export default function DashboardPage() {
             secondaryColor="bg-emerald-500"
             valueFormatter={formatMoney}
             emptyText="Aucun client compare"
+            action={directionChartActions.topCustomers}
           />
 
           <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
@@ -1900,6 +3017,300 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
+      {activeTab === "recouvrement" ? (
+        <div className="space-y-8">
+          <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-lg font-semibold text-slate-900">
+                  Suivi recouvrement et paiements
+                </div>
+                <div className="mt-1 text-sm text-slate-500">
+                  Filtrer les factures non encore payees, les paiements effectues et
+                  la heatmap produit x ville par periode, client, ville et depot.
+                </div>
+              </div>
+
+              {collectionLoading ? (
+                <div className="text-sm font-medium text-brand-600">
+                  Chargement du suivi...
+                </div>
+              ) : null}
+            </div>
+
+            <form
+              onSubmit={handleApplyCollectionFilters}
+              className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-7"
+            >
+              <FilterField label="Date debut">
+                <input
+                  type="date"
+                  name="start_date"
+                  value={collectionFilters.start_date}
+                  onChange={handleCollectionFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </FilterField>
+
+              <FilterField label="Date fin">
+                <input
+                  type="date"
+                  name="end_date"
+                  value={collectionFilters.end_date}
+                  onChange={handleCollectionFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </FilterField>
+
+              <FilterField label="Client">
+                <select
+                  name="customer_id"
+                  value={collectionFilters.customer_id}
+                  onChange={handleCollectionFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les clients</option>
+                  {sortedDashboardCustomers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.business_name}
+                    </option>
+                  ))}
+                </select>
+              </FilterField>
+
+              <FilterField label="Ville client">
+                <select
+                  name="customer_city"
+                  value={collectionFilters.customer_city}
+                  onChange={handleCollectionFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Toutes les villes</option>
+                  {customerCityOptions.map((city) => (
+                    <option key={city} value={city}>
+                      {city}
+                    </option>
+                  ))}
+                </select>
+              </FilterField>
+
+              <FilterField label="Depot">
+                <select
+                  name="warehouse_id"
+                  value={collectionFilters.warehouse_id}
+                  onChange={handleCollectionFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les depots</option>
+                  {warehouses.map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name} - {warehouse.city}
+                    </option>
+                  ))}
+                </select>
+              </FilterField>
+
+              <FilterField label="Top produits heatmap">
+                <select
+                  name="top_products"
+                  value={collectionFilters.top_products}
+                  onChange={handleCollectionFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  {[6, 8, 10, 12].map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </FilterField>
+
+              <FilterField label="Top villes heatmap">
+                <div className="flex gap-3">
+                  <select
+                    name="top_cities"
+                    value={collectionFilters.top_cities}
+                    onChange={handleCollectionFilterChange}
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                  >
+                    {[6, 8, 10, 12].map((value) => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="submit"
+                    disabled={collectionLoading}
+                    className="rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                  >
+                    Filtrer
+                  </button>
+                </div>
+              </FilterField>
+            </form>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              title="Factures non payees"
+              value={formatNumber(collectionSummary.total_unpaid_invoices)}
+              subtitle={`${formatMoney(collectionSummary.total_unpaid_amount)} a recouvrer`}
+            />
+            <StatCard
+              title="Factures echues"
+              value={formatNumber(collectionSummary.overdue_invoices_count)}
+              subtitle={`${formatMoney(collectionSummary.overdue_balance_amount)} en retard`}
+            />
+            <StatCard
+              title="Paiements effectues"
+              value={formatNumber(collectionSummary.total_payments)}
+              subtitle={`${formatMoney(collectionSummary.total_payments_amount)} encaisses`}
+            />
+            <StatCard
+              title="Portee filtree"
+              value={formatNumber(
+                Math.max(
+                  Number(collectionSummary.total_unpaid_customers || 0),
+                  Number(collectionSummary.total_payment_customers || 0)
+                )
+              )}
+              subtitle={`${formatNumber(
+                Math.max(
+                  Number(collectionSummary.total_unpaid_cities || 0),
+                  Number(collectionSummary.total_payment_cities || 0)
+                )
+              )} ville(s) concernees`}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-lg font-semibold text-slate-900">
+                    Factures non encore payees
+                  </div>
+                  <div className="mt-1 text-sm text-slate-500">
+                    Liste des creances encore ouvertes sur le filtre actif.
+                  </div>
+                </div>
+                <CardActionLink action={collectionChartActions.unpaidInvoices} />
+              </div>
+
+              <TableCard
+                title=""
+                rows={collectionUnpaidInvoices}
+                emptyText="Aucune facture impayee sur ce filtre"
+                columns={[
+                  { key: "invoice_number", label: "Facture" },
+                  {
+                    key: "invoice_date",
+                    label: "Date",
+                    render: (row) => formatDate(row.invoice_date)
+                  },
+                  {
+                    key: "due_date",
+                    label: "Echeance",
+                    render: (row) => formatDate(row.due_date)
+                  },
+                  { key: "customer_name", label: "Client" },
+                  { key: "customer_city", label: "Ville" },
+                  {
+                    key: "status",
+                    label: "Statut",
+                    render: (row) => (
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getInvoiceStatusClass(
+                          row.status
+                        )}`}
+                      >
+                        {row.status || "-"}
+                      </span>
+                    )
+                  },
+                  {
+                    key: "balance_due",
+                    label: "Solde",
+                    render: (row) => formatMoney(row.balance_due)
+                  },
+                  {
+                    key: "days_overdue",
+                    label: "Retard",
+                    render: (row) =>
+                      row.days_overdue === null
+                        ? "-"
+                        : `${Number(row.days_overdue || 0)} j`
+                  }
+                ]}
+              />
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-lg font-semibold text-slate-900">
+                    Paiements effectues
+                  </div>
+                  <div className="mt-1 text-sm text-slate-500">
+                    Encaissements recus sur la periode et le perimetre choisis.
+                  </div>
+                </div>
+                <CardActionLink action={collectionChartActions.payments} />
+              </div>
+
+              <TableCard
+                title=""
+                rows={collectionPayments}
+                emptyText="Aucun paiement sur ce filtre"
+                columns={[
+                  {
+                    key: "payment_date",
+                    label: "Date",
+                    render: (row) => formatDate(row.payment_date)
+                  },
+                  { key: "invoice_number", label: "Facture" },
+                  { key: "customer_name", label: "Client" },
+                  { key: "customer_city", label: "Ville" },
+                  { key: "payment_method", label: "Mode" },
+                  {
+                    key: "amount",
+                    label: "Montant",
+                    render: (row) => formatMoney(row.amount)
+                  },
+                  {
+                    key: "accounting_status",
+                    label: "Compta",
+                    render: (row) => (
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getAccountingStatusClass(
+                          row.accounting_status
+                        )}`}
+                      >
+                        {row.accounting_status || "n.d."}
+                      </span>
+                    )
+                  }
+                ]}
+              />
+            </div>
+          </div>
+
+          <ProductCityHeatmap
+            title="Heatmap produit x ville"
+            subtitle="Visualiser, dans la zone recouvrement, quels produits ont ete factures dans quelles villes sur le filtre actif."
+            data={collectionHeatmap}
+            summaryItems={collectionHeatmapSummaryItems}
+            formatMoney={formatMoney}
+            formatNumber={formatNumber}
+            formatPercent={formatPercent}
+            emptyText="Aucune heatmap produit x ville disponible sur ce filtre"
+            action={collectionChartActions.heatmap}
+          />
+        </div>
+      ) : null}
+
       {activeTab === "commercial" ? (
         <div className="space-y-8">
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -1957,6 +3368,7 @@ export default function DashboardPage() {
               colorClass="bg-emerald-500"
               valueFormatter={formatMoney}
               emptyText="Aucune vente par ville"
+              action={commercialChartActions.salesByCity}
             />
 
             <HorizontalBarChart
@@ -1968,6 +3380,7 @@ export default function DashboardPage() {
               colorClass="bg-brand-500"
               valueFormatter={formatMoney}
               emptyText="Aucune chaine analysee"
+              action={commercialChartActions.salesByChain}
             />
           </div>
 
@@ -1985,6 +3398,7 @@ export default function DashboardPage() {
               secondaryColor="bg-emerald-500"
               valueFormatter={formatMoney}
               emptyText="Aucune chaine comparee"
+              action={commercialChartActions.chainCollections}
             />
 
             <DualMetricRankingChart
@@ -2000,6 +3414,7 @@ export default function DashboardPage() {
               secondaryColor="bg-amber-500"
               valueFormatter={formatMoney}
               emptyText="Aucun canal compare"
+              action={commercialChartActions.channelProfit}
             />
           </div>
 
@@ -2013,6 +3428,7 @@ export default function DashboardPage() {
               colorClass="bg-amber-500"
               valueFormatter={formatMoney}
               emptyText="Aucun canal analyse"
+              action={commercialChartActions.salesByChannel}
             />
 
             <HorizontalBarChart
@@ -2024,6 +3440,7 @@ export default function DashboardPage() {
               colorClass="bg-brand-500"
               valueFormatter={formatNumber}
               emptyText="Aucun produit facture"
+              action={commercialChartActions.topProducts}
             />
           </div>
 
@@ -2048,6 +3465,7 @@ export default function DashboardPage() {
               formatNumber={formatNumber}
               formatPercent={formatPercent}
               emptyText="Aucune matrice produit x ville disponible"
+              action={commercialChartActions.heatmap}
             />
           </div>
 
@@ -2059,6 +3477,7 @@ export default function DashboardPage() {
               series={clientSalesTrend.series}
               valueFormatter={formatMoney}
               emptyText="Aucune evolution client disponible"
+              action={commercialChartActions.customerSalesTrend}
             />
 
             <MultiSeriesLineChart
@@ -2068,6 +3487,7 @@ export default function DashboardPage() {
               series={clientSalesTrend.series}
               valueFormatter={formatMoney}
               emptyText="Aucune evolution de paiement client disponible"
+              action={commercialChartActions.customerPaymentsTrend}
             />
           </div>
 
@@ -2216,6 +3636,7 @@ export default function DashboardPage() {
               secondaryColor="bg-amber-500"
               valueFormatter={formatMoney}
               emptyText="Aucun encaissement client"
+              action={commercialChartActions.topPayers}
             />
           </div>
         </div>
@@ -2467,11 +3888,13 @@ export default function DashboardPage() {
               helperText="Volume total manipule par famille de mouvement."
               colorClass="bg-brand-500"
               valueFormatter={formatNumber}
+              action={{ to: "/stock", label: "Voir stock" }}
             />
 
             <TimelineChart
               title="Evolution des variations"
               rows={variationData?.timeline || []}
+              action={{ to: "/stock", label: "Voir stock" }}
             />
           </div>
 

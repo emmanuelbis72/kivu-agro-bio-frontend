@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 const metricOptions = [
   {
@@ -125,10 +126,12 @@ export default function ProductCityHeatmap({
   subtitle,
   data,
   filterSummary = null,
+  summaryItems = null,
   formatMoney,
   formatNumber,
   formatPercent,
-  emptyText = "Aucune matrice disponible"
+  emptyText = "Aucune matrice disponible",
+  action = null
 }) {
   const [selectedMetricKey, setSelectedMetricKey] = useState("sales");
 
@@ -204,6 +207,42 @@ export default function ProductCityHeatmap({
     [cells]
   );
   const totalMatrixCells = cells.length;
+  const defaultSummaryItems = [
+    {
+      label: "Periode",
+      value:
+        filterSummary?.periodLabel ||
+        `${Number(appliedFilters.period_days || 0)} jours`
+    },
+    {
+      label: "Depot",
+      value: filterSummary?.warehouseLabel || "Tous les depots"
+    },
+    {
+      label: "Chaine",
+      value: filterSummary?.chainLabel || "Toutes les chaines"
+    },
+    {
+      label: "Canal",
+      value: filterSummary?.channelLabel || "Tous les canaux"
+    },
+    {
+      label: "Produits retenus",
+      value: `${products.length} / ${Number(appliedFilters.top_products || products.length || 0)}`
+    },
+    {
+      label: "Villes retenues",
+      value: `${cities.length} / ${Number(appliedFilters.top_cities || cities.length || 0)}`
+    },
+    {
+      label: "Cellules actives",
+      value: `${activeCellCount} / ${totalMatrixCells}`
+    }
+  ];
+  const renderedSummaryItems =
+    Array.isArray(summaryItems) && summaryItems.length > 0
+      ? summaryItems
+      : defaultSummaryItems;
 
   return (
     <div className="rounded-[30px] border border-slate-100 bg-white p-6 shadow-soft">
@@ -215,25 +254,38 @@ export default function ProductCityHeatmap({
           ) : null}
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2">
-          <div className="mb-2 px-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-            Metrique
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {metricOptions.map((metric) => (
-              <button
-                key={metric.key}
-                type="button"
-                onClick={() => setSelectedMetricKey(metric.key)}
-                className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
-                  selectedMetricKey === metric.key
-                    ? "bg-slate-900 text-white"
-                    : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
-                }`}
+        <div className="flex flex-col items-stretch gap-3">
+          {action?.to ? (
+            <div className="flex justify-end">
+              <Link
+                to={action.to}
+                className="inline-flex rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
               >
-                {metric.label}
-              </button>
-            ))}
+                {action.label || "Voir detail"}
+              </Link>
+            </div>
+          ) : null}
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2">
+            <div className="mb-2 px-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Metrique
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {metricOptions.map((metric) => (
+                <button
+                  key={metric.key}
+                  type="button"
+                  onClick={() => setSelectedMetricKey(metric.key)}
+                  className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
+                    selectedMetricKey === metric.key
+                      ? "bg-slate-900 text-white"
+                      : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
+                  }`}
+                >
+                  {metric.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -376,27 +428,14 @@ Marge: ${formatPercent(cell?.gross_margin_percent || 0)}`}
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
-              <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-200">
-                Periode: {filterSummary?.periodLabel || `${Number(appliedFilters.period_days || 0)} jours`}
-              </span>
-              <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-200">
-                Depot: {filterSummary?.warehouseLabel || "Tous les depots"}
-              </span>
-              <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-200">
-                Chaine: {filterSummary?.chainLabel || "Toutes les chaines"}
-              </span>
-              <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-200">
-                Canal: {filterSummary?.channelLabel || "Tous les canaux"}
-              </span>
-              <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-200">
-                Produits retenus: {products.length} / {Number(appliedFilters.top_products || products.length || 0)}
-              </span>
-              <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-200">
-                Villes retenues: {cities.length} / {Number(appliedFilters.top_cities || cities.length || 0)}
-              </span>
-              <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-200">
-                Cellules actives: {activeCellCount} / {totalMatrixCells}
-              </span>
+              {renderedSummaryItems.map((item, index) => (
+                <span
+                  key={`${item.label}-${index}`}
+                  className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-200"
+                >
+                  {item.label}: {item.value}
+                </span>
+              ))}
             </div>
           </div>
 
