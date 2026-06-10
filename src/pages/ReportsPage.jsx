@@ -46,6 +46,16 @@ function formatBoolean(value) {
   return value ? "Oui" : "Non";
 }
 
+function formatAccountType(value) {
+  return (
+    {
+      income: "Produits",
+      expense: "Charges",
+      result: "Resultat"
+    }[value] || value || ""
+  );
+}
+
 function compareAlphabetic(leftValue, rightValue) {
   return String(leftValue || "").localeCompare(String(rightValue || ""), "fr", {
     sensitivity: "base"
@@ -843,14 +853,39 @@ const reportConfigs = {
     summaryCards: (summary) => [
       { title: "Produits", value: formatMoney(summary.total_revenue) },
       { title: "Charges", value: formatMoney(summary.total_expense) },
+      { title: "Ventes nettes", value: formatMoney(summary.net_sales_amount) },
+      { title: "Cout des ventes", value: formatMoney(summary.total_cogs_amount) },
       { title: "Benefice brut", value: formatMoney(summary.gross_profit_amount) },
       { title: "Resultat net", value: formatMoney(summary.net_result) }
     ],
     columns: [
-      { key: "section", label: "Section", csvValue: (row) => row.section || "" },
+      {
+        key: "section",
+        label: "Rubrique",
+        render: (row) => (
+          <span className={row.line_type !== "account" ? "font-bold text-slate-900" : ""}>
+            {row.section || ""}
+          </span>
+        ),
+        csvValue: (row) => row.section || ""
+      },
       { key: "account_number", label: "Compte", csvValue: (row) => row.account_number || "" },
-      { key: "account_name", label: "Libelle", csvValue: (row) => row.account_name || "" },
-      { key: "account_type", label: "Type", csvValue: (row) => row.account_type || "" },
+      {
+        key: "account_name",
+        label: "Designation",
+        render: (row) => (
+          <span className={row.line_type !== "account" ? "font-bold text-slate-900" : ""}>
+            {row.account_name || ""}
+          </span>
+        ),
+        csvValue: (row) => row.account_name || ""
+      },
+      {
+        key: "account_type",
+        label: "Nature",
+        render: (row) => formatAccountType(row.account_type),
+        csvValue: (row) => formatAccountType(row.account_type)
+      },
       {
         key: "total_debit",
         label: "Debit",
@@ -865,8 +900,12 @@ const reportConfigs = {
       },
       {
         key: "net_amount",
-        label: "Net",
-        render: (row) => formatMoney(row.net_amount),
+        label: "Montant net",
+        render: (row) => (
+          <span className={row.line_type !== "account" ? "font-bold text-slate-900" : ""}>
+            {formatMoney(row.net_amount)}
+          </span>
+        ),
         csvValue: (row) => row.net_amount
       }
     ],
@@ -885,51 +924,76 @@ const reportConfigs = {
     exportFilename: (filters) =>
       `etat-tresorerie-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
     summaryCards: (summary) => [
+      { title: "Mouvements", value: Number(summary.movements_count || 0) },
       { title: "Encaissements", value: formatMoney(summary.total_receipts) },
       { title: "Sorties", value: formatMoney(summary.total_outflows) },
       { title: "Flux net", value: formatMoney(summary.net_cash_flow) },
       { title: "Tresorerie observee", value: formatMoney(summary.current_cash_base) }
     ],
     columns: [
-      { key: "period_label", label: "Periode", csvValue: (row) => row.period_label || "" },
       {
-        key: "customer_receipts",
-        label: "Encaissements",
-        render: (row) => formatMoney(row.customer_receipts),
-        csvValue: (row) => row.customer_receipts
+        key: "movement_date",
+        label: "Date",
+        render: (row) => (row.is_total ? "" : formatDate(row.movement_date)),
+        csvValue: (row) => (row.is_total ? "" : formatDate(row.movement_date))
+      },
+      { key: "flow_type", label: "Nature", csvValue: (row) => row.flow_type || "" },
+      {
+        key: "designation",
+        label: "Designation",
+        render: (row) => (
+          <span className={row.is_total ? "font-bold text-slate-900" : ""}>
+            {row.designation || ""}
+          </span>
+        ),
+        csvValue: (row) => row.designation || ""
+      },
+      { key: "third_party", label: "Client / fournisseur", csvValue: (row) => row.third_party || "" },
+      { key: "warehouse_name", label: "Depot", csvValue: (row) => row.warehouse_name || "" },
+      { key: "document_reference", label: "Piece", csvValue: (row) => row.document_reference || "" },
+      { key: "payment_method", label: "Mode", csvValue: (row) => row.payment_method || "" },
+      {
+        key: "inflow",
+        label: "Entree",
+        render: (row) => (
+          <span className={row.is_total ? "font-bold text-emerald-700" : "text-emerald-700"}>
+            {formatMoney(row.inflow)}
+          </span>
+        ),
+        csvValue: (row) => row.inflow
       },
       {
-        key: "supplier_payments",
-        label: "Paiements fournisseurs",
-        render: (row) => formatMoney(row.supplier_payments),
-        csvValue: (row) => row.supplier_payments
+        key: "outflow",
+        label: "Sortie",
+        render: (row) => (
+          <span className={row.is_total ? "font-bold text-rose-700" : "text-rose-700"}>
+            {formatMoney(row.outflow)}
+          </span>
+        ),
+        csvValue: (row) => row.outflow
       },
       {
-        key: "operating_expenses",
-        label: "Depenses",
-        render: (row) => formatMoney(row.operating_expenses),
-        csvValue: (row) => row.operating_expenses
-      },
-      {
-        key: "total_outflows",
-        label: "Sorties",
-        render: (row) => formatMoney(row.total_outflows),
-        csvValue: (row) => row.total_outflows
-      },
-      {
-        key: "net_cash_flow",
+        key: "net_amount",
         label: "Flux net",
-        render: (row) => formatMoney(row.net_cash_flow),
-        csvValue: (row) => row.net_cash_flow
+        render: (row) => (
+          <span className={row.is_total ? "font-bold text-slate-900" : ""}>
+            {formatMoney(row.net_amount)}
+          </span>
+        ),
+        csvValue: (row) => row.net_amount
       },
       {
-        key: "cumulative_net_cash_flow",
-        label: "Cumul",
-        render: (row) => formatMoney(row.cumulative_net_cash_flow),
-        csvValue: (row) => row.cumulative_net_cash_flow
+        key: "running_balance",
+        label: "Solde cumule",
+        render: (row) => (
+          <span className={row.is_total ? "font-bold text-slate-900" : ""}>
+            {formatMoney(row.running_balance)}
+          </span>
+        ),
+        csvValue: (row) => row.running_balance
       }
     ],
-    emptyText: "Aucune periode de tresorerie disponible"
+    emptyText: "Aucun mouvement de tresorerie disponible"
   },
   receipts_journal: {
     exportKey: "receipts-journal",

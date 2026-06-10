@@ -36,7 +36,10 @@ function formatPercent(value) {
 }
 
 function formatDateInput(date) {
-  return date.toISOString().split("T")[0];
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function buildPathWithQuery(pathname, paramsObject = {}) {
@@ -129,13 +132,16 @@ function formatSignedPercent(value) {
 
 function formatChartPeriodLabel(row) {
   const period = String(row?.period || "").trim();
-  const half = Number(row?.period_half || 0);
-  const month = String(row?.month_period || period.split("-H")[0] || "").trim();
-  const shortMonth = month.match(/^\d{4}-(\d{2})$/)?.[1];
-  const periodHalf = half || Number(period.match(/-H([12])$/)?.[1] || 0);
 
-  if (shortMonth && periodHalf) {
-    return `${shortMonth}/${periodHalf}`;
+  if (row?.period_start) {
+    const date = new Date(row.period_start);
+
+    if (!Number.isNaN(date.getTime())) {
+      return new Intl.DateTimeFormat("fr-FR", {
+        month: "short",
+        year: "2-digit"
+      }).format(date);
+    }
   }
 
   return period;
@@ -182,8 +188,7 @@ function getDefaultFilters() {
 
 function getDefaultDirectionFilters() {
   const endDate = new Date();
-  const startDate = new Date();
-  startDate.setDate(endDate.getDate() - 179);
+  const startDate = new Date(endDate.getFullYear(), endDate.getMonth() - 5, 1);
 
   return {
     start_date: formatDateInput(startDate),
@@ -206,6 +211,18 @@ function getDefaultCollectionFilters() {
     entry_type: "all",
     top_products: "8",
     top_cities: "8"
+  };
+}
+
+function getDefaultCustomerBalanceFilters() {
+  const endDate = new Date();
+  const startDate = new Date(endDate.getFullYear(), endDate.getMonth() - 5, 1);
+
+  return {
+    start_date: formatDateInput(startDate),
+    end_date: formatDateInput(endDate),
+    warehouse_id: "",
+    customer_id: ""
   };
 }
 
@@ -745,6 +762,102 @@ function HorizontalBarChart({
   );
 }
 
+function ExpenseDonutChart({
+  title,
+  rows,
+  action = null,
+  emptyText = "Aucune depense sur la periode"
+}) {
+  const palette = [
+    "#E11D48",
+    "#EA580C",
+    "#D97706",
+    "#7C3AED",
+    "#2563EB",
+    "#0891B2",
+    "#059669",
+    "#475569"
+  ];
+  const normalizedRows = (Array.isArray(rows) ? rows : [])
+    .map((row, index) => ({
+      ...row,
+      value: Number(row.total_amount || 0),
+      color: palette[index % palette.length]
+    }))
+    .filter((row) => row.value > 0);
+  const total = normalizedRows.reduce((sum, row) => sum + row.value, 0);
+  let cursor = 0;
+  const gradientStops = normalizedRows.map((row) => {
+    const start = cursor;
+    cursor += total > 0 ? (row.value / total) * 100 : 0;
+    return `${row.color} ${start}% ${cursor}%`;
+  });
+
+  return (
+    <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+      <div className="mb-2 flex items-start justify-between gap-4">
+        <div className="text-lg font-semibold text-slate-900">{title}</div>
+        <CardActionLink action={action} />
+      </div>
+      <div className="mb-5 text-sm text-slate-500">
+        Repartition statistique des charges par categorie sur le filtre DG actif.
+      </div>
+
+      {normalizedRows.length === 0 ? (
+        <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+          {emptyText}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
+          <div className="relative mx-auto h-52 w-52">
+            <div
+              className="h-full w-full rounded-full"
+              style={{
+                background: `conic-gradient(${gradientStops.join(", ")})`
+              }}
+            />
+            <div className="absolute inset-10 flex flex-col items-center justify-center rounded-full bg-white text-center shadow-inner">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                Total
+              </div>
+              <div className="mt-2 text-xl font-bold text-slate-900">
+                {formatMoney(total)}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {normalizedRows.map((row) => (
+              <div
+                key={row.category}
+                className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-3"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <span
+                    className="h-3 w-3 shrink-0 rounded-full"
+                    style={{ backgroundColor: row.color }}
+                  />
+                  <span className="truncate text-sm font-medium text-slate-700">
+                    {row.category || "Non classe"}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-semibold text-slate-900">
+                    {formatMoney(row.value)}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    {formatPercent(total > 0 ? (row.value / total) * 100 : 0)}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SalesPulseChart({ rows, action = null }) {
   const recentRows = rows.slice(-6);
   const maxValue = Math.max(
@@ -1234,8 +1347,19 @@ function PointOfSaleCoverageMap({
   );
 }
 
-function CustomerBalanceBoardTable({ board }) {
+function CustomerBalanceBoardTable({
+  board,
+  filters,
+  customers,
+  warehouses,
+  loading,
+  onChange,
+  onSubmit
+}) {
   const rows = Array.isArray(board?.rows) ? board.rows : [];
+  const monthlyTrend = Array.isArray(board?.monthly_trend)
+    ? board.monthly_trend
+    : [];
   const totals = board?.totals || {};
 
   function getBalanceClass(value) {
@@ -1253,20 +1377,98 @@ function CustomerBalanceBoardTable({ board }) {
   }
 
   return (
-    <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
-      <div className="mb-2 text-lg font-semibold text-slate-900">
-        Bilan clients
-      </div>
-      <div className="mb-5 text-sm text-slate-500">
-        Vue par client avec un cote factures, un cote paiements et la balance restante a equilibrer.
+    <div className="space-y-6">
+      <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+        <div className="mb-2 text-lg font-semibold text-slate-900">
+          Bilan clients
+        </div>
+        <div className="mb-5 text-sm text-slate-500">
+          Filtrer les factures et paiements par periode, client et depot.
+        </div>
+
+        <form
+          onSubmit={onSubmit}
+          className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5"
+        >
+          <FilterField label="Date debut">
+            <input
+              type="date"
+              name="start_date"
+              value={filters.start_date}
+              onChange={onChange}
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+            />
+          </FilterField>
+          <FilterField label="Date fin">
+            <input
+              type="date"
+              name="end_date"
+              value={filters.end_date}
+              onChange={onChange}
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+            />
+          </FilterField>
+          <FilterField label="Client">
+            <select
+              name="customer_id"
+              value={filters.customer_id}
+              onChange={onChange}
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+            >
+              <option value="">Tous les clients</option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.business_name}
+                </option>
+              ))}
+            </select>
+          </FilterField>
+          <FilterField label="Depot">
+            <select
+              name="warehouse_id"
+              value={filters.warehouse_id}
+              onChange={onChange}
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+            >
+              <option value="">Tous les depots</option>
+              {warehouses.map((warehouse) => (
+                <option key={warehouse.id} value={warehouse.id}>
+                  {warehouse.name}
+                </option>
+              ))}
+            </select>
+          </FilterField>
+          <div className="flex items-end">
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {loading ? "Chargement..." : "Filtrer"}
+            </button>
+          </div>
+        </form>
       </div>
 
-      {rows.length === 0 ? (
-        <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-          Aucun client facture pour ce bilan
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
+      <MultiSeriesLineChart
+        title="Suivi mensuel factures emises / paiements recus"
+        subtitle="Comparaison superposee sur les six derniers mois du filtre selectionne."
+        rows={monthlyTrend}
+        series={[
+          { key: "invoiced_amount", label: "Factures emises", color: "#2563EB" },
+          { key: "payments_received", label: "Paiements recus", color: "#059669" }
+        ]}
+        valueFormatter={formatMoney}
+        emptyText="Aucune tendance client disponible"
+      />
+
+      <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+        {rows.length === 0 ? (
+          <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+            Aucun client facture pour ce bilan
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200">
@@ -1360,8 +1562,9 @@ function CustomerBalanceBoardTable({ board }) {
               </tr>
             </tfoot>
           </table>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1466,6 +1669,7 @@ const tabItems = [
 export default function DashboardPage() {
   const [overviewData, setOverviewData] = useState(null);
   const [directionData, setDirectionData] = useState(null);
+  const [customerBalanceData, setCustomerBalanceData] = useState(null);
   const [collectionData, setCollectionData] = useState(null);
   const [commercialData, setCommercialData] = useState(null);
   const [accountingData, setAccountingData] = useState(null);
@@ -1477,6 +1681,9 @@ export default function DashboardPage() {
   const [directionFilters, setDirectionFilters] = useState(getDefaultDirectionFilters);
   const [collectionFilters, setCollectionFilters] = useState(
     getDefaultCollectionFilters
+  );
+  const [customerBalanceFilters, setCustomerBalanceFilters] = useState(
+    getDefaultCustomerBalanceFilters
   );
   const [heatmapFilters, setHeatmapFilters] = useState(() =>
     getDefaultCommercialHeatmapFilters({
@@ -1490,6 +1697,7 @@ export default function DashboardPage() {
   const [reportLoading, setReportLoading] = useState(false);
   const [directionLoading, setDirectionLoading] = useState(false);
   const [collectionLoading, setCollectionLoading] = useState(false);
+  const [customerBalanceLoading, setCustomerBalanceLoading] = useState(false);
   const [commercialRefreshing, setCommercialRefreshing] = useState(false);
   const [error, setError] = useState("");
 
@@ -1526,6 +1734,23 @@ export default function DashboardPage() {
       `/dashboard/executive-analytics?${params.toString()}`
     );
     setDirectionData(response.data?.data || null);
+  }
+
+  async function fetchCustomerBalanceBoard(
+    currentFilters = customerBalanceFilters
+  ) {
+    const params = new URLSearchParams();
+
+    Object.entries(currentFilters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        params.set(key, value);
+      }
+    });
+
+    const response = await api.get(
+      `/dashboard/customer-balance-board?${params.toString()}`
+    );
+    setCustomerBalanceData(response.data?.data || null);
   }
 
   async function fetchCollectionsOverview(
@@ -1655,12 +1880,20 @@ export default function DashboardPage() {
       setLoading(true);
       setError("");
 
-      const [contextErrors, variationResult, directionResult] = await Promise.all([
+      const [
+        contextErrors,
+        variationResult,
+        directionResult,
+        customerBalanceResult
+      ] = await Promise.all([
         fetchContextData(currentHeatmapFilters, currentCollectionFilters),
         fetchStockVariationReport(initialFilters)
           .then(() => ({ ok: true }))
           .catch((err) => ({ ok: false, err })),
         fetchExecutiveAnalytics(currentDirectionFilters)
+          .then(() => ({ ok: true }))
+          .catch((err) => ({ ok: false, err })),
+        fetchCustomerBalanceBoard(customerBalanceFilters)
           .then(() => ({ ok: true }))
           .catch((err) => ({ ok: false, err }))
       ]);
@@ -1675,6 +1908,11 @@ export default function DashboardPage() {
       if (!directionResult.ok) {
         setDirectionData(null);
         errors.push("analyse DG");
+      }
+
+      if (!customerBalanceResult.ok) {
+        setCustomerBalanceData(null);
+        errors.push("bilan clients");
       }
 
       if (errors.length > 0) {
@@ -1742,6 +1980,32 @@ export default function DashboardPage() {
       ...prev,
       [name]: value
     }));
+  }
+
+  function handleCustomerBalanceFilterChange(event) {
+    const { name, value } = event.target;
+    setCustomerBalanceFilters((prev) => ({
+      ...prev,
+      [name]: value
+    }));
+  }
+
+  async function handleApplyCustomerBalanceFilters(event) {
+    event.preventDefault();
+
+    try {
+      setCustomerBalanceLoading(true);
+      setError("");
+      await fetchCustomerBalanceBoard(customerBalanceFilters);
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de charger le bilan clients."
+      );
+    } finally {
+      setCustomerBalanceLoading(false);
+    }
   }
 
   async function handleApplyCollectionFilters(event) {
@@ -1874,8 +2138,10 @@ export default function DashboardPage() {
     directionAnalytics?.expenses_by_category || [];
   const directionExpenseScopeNote =
     directionAnalytics?.filters?.expenses_scope_note || "";
-  const customerBalanceBoard = overviewData?.customer_balance_board || {
+  const customerBalanceBoard = customerBalanceData ||
+    overviewData?.customer_balance_board || {
     rows: [],
+    monthly_trend: [],
     totals: {}
   };
   const commercialSummary = commercialData?.summary || {};
@@ -2413,8 +2679,6 @@ export default function DashboardPage() {
       if (!salesPeriodMap.has(row.period)) {
         salesPeriodMap.set(row.period, {
           period: row.period,
-          month_period: row.month_period,
-          period_half: row.period_half,
           period_start: row.period_start,
           period_end: row.period_end
         });
@@ -2423,8 +2687,6 @@ export default function DashboardPage() {
       if (!paymentPeriodMap.has(row.period)) {
         paymentPeriodMap.set(row.period, {
           period: row.period,
-          month_period: row.month_period,
-          period_half: row.period_half,
           period_start: row.period_start,
           period_end: row.period_end
         });
@@ -2632,6 +2894,28 @@ export default function DashboardPage() {
                 <div className="mt-1 text-sm text-slate-500">
                   Filtres communs pour les graphes de pilotage: ventes, recouvrement, marge, stock, creances et depenses.
                 </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {[
+                    "CA mensuel",
+                    "Factures / paiements",
+                    "Ventes par ville et client",
+                    "Pareto produits",
+                    "Marge produits",
+                    "Carte et heatmap",
+                    "Couverture stock",
+                    "Depenses",
+                    "Creances",
+                    "Prevision IA",
+                    "Performance depots"
+                  ].map((label) => (
+                    <span
+                      key={label}
+                      className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700"
+                    >
+                      {label}
+                    </span>
+                  ))}
+                </div>
               </div>
               {directionExpenseScopeNote ? (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 xl:max-w-md">
@@ -2821,14 +3105,9 @@ export default function DashboardPage() {
               action={directionChartActions.stockCoverage}
             />
 
-            <HorizontalBarChart
+            <ExpenseDonutChart
               title="Depenses par categorie"
               rows={directionExpensesByCategory}
-              labelKey="category"
-              valueKey="total_amount"
-              helperText="Comprendre ou part l'argent sur la periode."
-              colorClass="bg-rose-500"
-              valueFormatter={formatMoney}
               emptyText="Aucune depense sur la periode"
               action={directionChartActions.expensesByCategory}
             />
@@ -2915,7 +3194,15 @@ export default function DashboardPage() {
             action={directionChartActions.salesPulse}
           />
 
-          <CustomerBalanceBoardTable board={customerBalanceBoard} />
+          <CustomerBalanceBoardTable
+            board={customerBalanceBoard}
+            filters={customerBalanceFilters}
+            customers={sortedDashboardCustomers}
+            warehouses={warehouses}
+            loading={customerBalanceLoading}
+            onChange={handleCustomerBalanceFilterChange}
+            onSubmit={handleApplyCustomerBalanceFilters}
+          />
 
           <DualMetricRankingChart
             title="Clients qui facturent et paient le plus"
