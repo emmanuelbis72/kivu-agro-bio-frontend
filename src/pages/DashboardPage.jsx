@@ -6,7 +6,6 @@ import StatCard from "../components/ui/StatCard";
 import TableCard from "../components/ui/TableCard";
 import ProductCityHeatmap from "../components/ui/ProductCityHeatmap";
 import CommercialHeatmapFilterPanel from "../components/ui/CommercialHeatmapFilterPanel";
-import TreasuryBreakdown from "../components/ui/TreasuryBreakdown";
 import {
   buildAlphabeticalOptions,
   buildCommercialHeatmapQueryParams,
@@ -451,93 +450,6 @@ function DeltaBadge({ value, formatter = formatSignedPercent }) {
   );
 }
 
-function ExecutiveMetricCell({ label, value }) {
-  return (
-    <div className="rounded-2xl bg-white/80 px-4 py-3 shadow-sm ring-1 ring-slate-100">
-      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-        {label}
-      </div>
-      <div className="mt-2 text-base font-bold text-slate-900">{value}</div>
-    </div>
-  );
-}
-
-function ExecutivePeriodCard({ title, period, tone = "slate" }) {
-  const toneClasses = {
-    brand: "border-brand-100 bg-gradient-to-br from-brand-50/70 via-white to-white",
-    emerald:
-      "border-emerald-100 bg-gradient-to-br from-emerald-50/80 via-white to-white",
-    amber: "border-amber-100 bg-gradient-to-br from-amber-50/80 via-white to-white",
-    slate: "border-slate-100 bg-gradient-to-br from-slate-50/80 via-white to-white"
-  };
-
-  const currentPeriod = period || {};
-
-  return (
-    <div
-      className={`rounded-[28px] border p-5 shadow-soft ${
-        toneClasses[tone] || toneClasses.slate
-      }`}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-            {title}
-          </div>
-          <div className="mt-2 text-sm text-slate-600">
-            {formatPeriodRange(
-              currentPeriod.start_date,
-              currentPeriod.end_date
-            )}
-          </div>
-        </div>
-        <span className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm ring-1 ring-slate-100">
-          {Number(currentPeriod.total_invoices || 0)} facture(s)
-        </span>
-      </div>
-
-      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <ExecutiveMetricCell
-          label="Facture"
-          value={formatMoney(currentPeriod.invoiced_amount)}
-        />
-        <ExecutiveMetricCell
-          label="Encaisse"
-          value={formatMoney(currentPeriod.payments_received)}
-        />
-        <ExecutiveMetricCell
-          label="Depenses"
-          value={formatMoney(currentPeriod.expenses_amount)}
-        />
-        <ExecutiveMetricCell
-          label="Profit brut"
-          value={formatMoney(currentPeriod.gross_profit_amount)}
-        />
-        <ExecutiveMetricCell
-          label="Net estime"
-          value={formatMoney(currentPeriod.net_profit_estimate)}
-        />
-        <ExecutiveMetricCell
-          label="Marge nette"
-          value={formatPercent(currentPeriod.net_margin_percent)}
-        />
-      </div>
-
-      <div className="mt-5 flex flex-wrap gap-2 text-xs text-slate-500">
-        <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-100">
-          {Number(currentPeriod.payments_count || 0)} paiement(s)
-        </span>
-        <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-100">
-          {Number(currentPeriod.expenses_count || 0)} depense(s)
-        </span>
-        <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-100">
-          {Number(currentPeriod.span_days || 0)} jour(s)
-        </span>
-      </div>
-    </div>
-  );
-}
-
 function ExecutiveInsightCard({
   eyebrow,
   title,
@@ -557,7 +469,9 @@ function ExecutiveInsightCard({
             {title}
           </div>
         </div>
-        <DeltaBadge value={deltaValue} formatter={deltaFormatter} />
+        {deltaValue !== null && deltaValue !== undefined ? (
+          <DeltaBadge value={deltaValue} formatter={deltaFormatter} />
+        ) : null}
       </div>
 
       <div className="mt-5 text-3xl font-bold text-slate-900">{value}</div>
@@ -572,120 +486,101 @@ function ExecutiveKpiSnapshotSection({ snapshot }) {
   const periods = snapshot?.periods || {};
   const comparisons = snapshot?.comparisons || {};
   const targets = snapshot?.targets || {};
-  const forecasts = snapshot?.forecasts || {};
-  const previousMonth = comparisons.month_vs_previous_month_to_date || {};
-  const lastYear = comparisons.month_vs_same_period_last_year || {};
-  const salesForecastToDate = forecasts.sales_30d_forecast_to_date;
-  const cashForecastToDate = forecasts.cash_30d_forecast_to_date;
+  const last30Days = periods.last_30_days || {};
+  const previous30Days = periods.previous_30_days || {};
+  const comparison =
+    comparisons.last_30_days_vs_previous_30_days || {};
 
   const insightCards = [
     {
-      key: "previous",
+      key: "payments-comparison",
       eyebrow: "Comparatif M-1",
-      title: "Encaissements du mois vs mois precedent",
-      value: formatMoney(previousMonth.current_period?.payments_received),
-      subtitle: `Facture ${formatSignedMoney(
-        previousMonth.invoiced_delta
-      )} • Encaisse ${formatSignedMoney(previousMonth.payments_delta)}`,
-      deltaValue: previousMonth.payments_delta_percent
+      title: "Encaissements des 30 derniers jours",
+      value: formatMoney(last30Days.payments_received),
+      subtitle: `Periode precedente : ${formatMoney(
+        previous30Days.payments_received
+      )} • ecart ${formatSignedMoney(comparison.payments_delta)}`,
+      deltaValue: comparison.payments_delta_percent
     },
     {
-      key: "last-year",
-      eyebrow: "Comparatif N-1",
-      title: "Meme periode de l annee precedente",
-      value: formatMoney(lastYear.current_period?.payments_received),
-      subtitle: `Profit net ${formatSignedMoney(
-        lastYear.net_profit_delta
-      )} • Facture ${formatSignedMoney(lastYear.invoiced_delta)}`,
-      deltaValue: lastYear.payments_delta_percent
+      key: "pieces",
+      eyebrow: "Volume vendu",
+      title: "Pieces vendues sur les 30 derniers jours",
+      value: formatNumber(last30Days.total_quantity_sold),
+      subtitle: `${formatNumber(
+        previous30Days.total_quantity_sold
+      )} piece(s) sur les 31 a 60 jours precedents`,
+      deltaValue: null
     },
     {
       key: "target",
-      eyebrow: "Objectif mensuel",
-      title: "Cadence d encaissement",
-      value: formatMoney(targets.actual_collected_to_date),
-      subtitle: `Attendu ${formatMoney(
-        targets.expected_collected_to_date
-      )} • objectif complet ${formatMoney(targets.monthly_revenue_target)}`,
-      deltaValue: targets.collected_gap_to_target,
+      eyebrow: "Objectif paiements",
+      title: "Cible des 30 prochains jours",
+      value: formatMoney(targets.payment_target_next_30_days),
+      subtitle: `Encaisse sur les 30 derniers jours : ${formatMoney(
+        targets.actual_collected_last_30_days
+      )} • reste a couvrir ${formatMoney(targets.payment_target_remaining)}`,
+      deltaValue: -Number(targets.payment_target_remaining || 0),
       deltaFormatter: formatSignedMoney
     },
     {
-      key: "forecast",
-      eyebrow: "Prevision IA",
-      title: "Projection cash et ventes a date",
-      value:
-        cashForecastToDate === null || cashForecastToDate === undefined
-          ? "n.d."
-          : formatMoney(cashForecastToDate),
-      subtitle: `Cash reel ${formatMoney(
-        forecasts.actual_cash_to_date
-      )} • ventes vs IA ${
-        salesForecastToDate === null || salesForecastToDate === undefined
-          ? "n.d."
-          : formatSignedMoney(forecasts.sales_gap_to_forecast)
-      }`,
-      deltaValue: forecasts.cash_gap_to_forecast,
-      deltaFormatter: formatSignedMoney
+      key: "profit-comparison",
+      eyebrow: "Comparatif benefice",
+      title: "Benefice brut des 30 derniers jours",
+      value: formatMoney(last30Days.gross_profit_amount),
+      subtitle: `Periode precedente : ${formatMoney(
+        previous30Days.gross_profit_amount
+      )} • ecart ${formatSignedMoney(comparison.gross_profit_delta)}`,
+      deltaValue: comparison.gross_profit_delta_percent
     }
   ];
 
   return (
     <div className="rounded-[30px] border border-slate-100 bg-white p-6 shadow-soft">
-      <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-        <div className="max-w-3xl">
-          <div className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
-            Cockpit DG
-          </div>
-          <div className="mt-3 text-2xl font-bold text-slate-900">
-            Synthese jour, semaine et mois avec objectif et projection IA
-          </div>
-          <div className="mt-3 text-sm leading-7 text-slate-600">
-            Lecture prioritaire pour arbitrer le cash, le recouvrement, les
-            depenses et l avance du mois sans quitter la vue direction.
-          </div>
+      <div className="max-w-4xl">
+        <div className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
+          Cockpit DG
         </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:min-w-[360px]">
-          <SignalCard
-            title="Tresorerie disponible"
-            value={formatMoney(snapshot?.current_cash_base)}
-            subtitle={
-              <TreasuryBreakdown
-                cashOnHand={snapshot?.cash_on_hand_base}
-                bank={snapshot?.bank_base}
-                mobileMoney={snapshot?.mobile_money_base}
-                other={snapshot?.other_treasury_base}
-                header={`Photo au ${formatDateTime(snapshot?.as_of_date)}`}
-              />
-            }
-            tone="green"
-          />
-          <SignalCard
-            title="Creances ouvertes"
-            value={formatMoney(snapshot?.open_receivables)}
-            subtitle="Factures encore a encaisser"
-            tone="amber"
-          />
-          <SignalCard
-            title="Dettes ouvertes"
-            value={formatMoney(snapshot?.open_payables)}
-            subtitle="Decaissements fournisseurs a couvrir"
-            tone="red"
-          />
-          <SignalCard
-            title="Progression du mois"
-            value={formatPercent(targets.month_progress_percent)}
-            subtitle={targets.target_label || "Cadence du mois en cours"}
-            tone="blue"
-          />
+        <div className="mt-3 text-2xl font-bold text-slate-900">
+          Activite consolidee des 30 derniers jours
+        </div>
+        <div className="mt-3 text-sm leading-7 text-slate-600">
+          Facturation, encaissements, charges, rentabilite et montants restant
+          a recouvrer sur une meme fenetre glissante de 30 jours.
         </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-3">
-        <ExecutivePeriodCard title="Aujourd hui" period={periods.day} tone="brand" />
-        <ExecutivePeriodCard title="Semaine" period={periods.week} tone="emerald" />
-        <ExecutivePeriodCard title="Mois" period={periods.month} tone="amber" />
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <SignalCard
+          title="Factures emises"
+          value={formatMoney(last30Days.invoiced_amount)}
+          subtitle={`${Number(last30Days.total_invoices || 0)} facture(s)`}
+          tone="blue"
+        />
+        <SignalCard
+          title="Paiements recus"
+          value={formatMoney(last30Days.payments_received)}
+          subtitle={`${Number(last30Days.payments_count || 0)} paiement(s)`}
+          tone="green"
+        />
+        <SignalCard
+          title="Depenses"
+          value={formatMoney(last30Days.expenses_amount)}
+          subtitle={`${Number(last30Days.expenses_count || 0)} depense(s)`}
+          tone="red"
+        />
+        <SignalCard
+          title="Benefice brut"
+          value={formatMoney(last30Days.gross_profit_amount)}
+          subtitle={`Marge brute ${formatPercent(last30Days.gross_margin_percent)}`}
+          tone="green"
+        />
+        <SignalCard
+          title="Sommes a payer"
+          value={formatMoney(snapshot?.open_receivables)}
+          subtitle="Solde total de toutes les factures non encore payees"
+          tone="amber"
+        />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
@@ -1160,62 +1055,221 @@ function ParetoChart({
   emptyText = "Aucune analyse Pareto disponible",
   action = null
 }) {
-  const maxValue = Math.max(...rows.map((row) => Number(row.total_sales_amount || 0)), 0);
+  const displayedRows = rows.slice(0, 10);
+  const maxValue = Math.max(
+    ...displayedRows.map((row) => Number(row.total_sales_amount || 0)),
+    0
+  );
+  const width = 960;
+  const height = 390;
+  const padding = { top: 30, right: 60, bottom: 90, left: 75 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const slotWidth =
+    displayedRows.length > 0 ? plotWidth / displayedRows.length : plotWidth;
+  const barWidth = Math.min(slotWidth * 0.62, 58);
+  const points = displayedRows.map((row, index) => {
+    const centerX = padding.left + slotWidth * index + slotWidth / 2;
+    const cumulativeShare = Math.min(
+      Number(row.cumulative_sales_share_percent || 0),
+      100
+    );
+
+    return {
+      x: centerX,
+      y: padding.top + plotHeight * (1 - cumulativeShare / 100)
+    };
+  });
+  const cumulativePath = points
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
+    .join(" ");
 
   return (
     <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
-      <div className="mb-2 flex items-start justify-between gap-4">
-        <div className="text-lg font-semibold text-slate-900">{title}</div>
+      <div className="mb-2 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="text-lg font-semibold text-slate-900">{title}</div>
+          {subtitle ? (
+            <div className="mt-2 text-sm text-slate-500">{subtitle}</div>
+          ) : null}
+        </div>
         <CardActionLink action={action} />
       </div>
-      {subtitle ? <div className="mb-5 text-sm text-slate-500">{subtitle}</div> : null}
 
-      {rows.length === 0 ? (
+      {displayedRows.length === 0 ? (
         <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
           {emptyText}
         </div>
       ) : (
-        <div className="space-y-4">
-          {rows.map((row) => {
-            const salesAmount = Number(row.total_sales_amount || 0);
-            const width = maxValue > 0 ? Math.max((salesAmount / maxValue) * 100, 2) : 0;
-            const cumulativeShare = Number(row.cumulative_sales_share_percent || 0);
+        <>
+          <div className="mt-5 flex flex-wrap gap-4 text-xs font-semibold text-slate-600">
+            <span className="inline-flex items-center gap-2">
+              <span className="h-3 w-3 rounded bg-brand-500" />
+              Chiffre d'affaires
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <span className="h-0.5 w-5 bg-emerald-500" />
+              Part cumulee
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <span className="h-0.5 w-5 border-t-2 border-dashed border-amber-500" />
+              Seuil Pareto 80 %
+            </span>
+          </div>
 
-            return (
-              <div key={row.product_id} className="space-y-2">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-semibold text-slate-800">
-                      {row.rank_order}. {row.product_name}
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      {row.category || "Categorie non renseignee"}
-                    </div>
-                  </div>
-                  <div className="text-right text-xs text-slate-500">
-                    <div>{formatMoney(salesAmount)}</div>
-                    <div>Cumul {formatPercent(cumulativeShare)}</div>
-                  </div>
+          <div className="mt-4 overflow-x-auto rounded-3xl border border-slate-100 bg-gradient-to-b from-slate-50 to-white p-3">
+            <svg
+              viewBox={`0 0 ${width} ${height}`}
+              className="min-w-[820px]"
+              role="img"
+              aria-label="Diagramme de Pareto des produits"
+            >
+              <defs>
+                <linearGradient id="paretoBars" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#2563EB" />
+                  <stop offset="100%" stopColor="#60A5FA" />
+                </linearGradient>
+              </defs>
+
+              {[0, 25, 50, 75, 100].map((percent) => {
+                const y = padding.top + plotHeight * (1 - percent / 100);
+                return (
+                  <g key={percent}>
+                    <line
+                      x1={padding.left}
+                      x2={width - padding.right}
+                      y1={y}
+                      y2={y}
+                      stroke="#E2E8F0"
+                      strokeWidth="1"
+                    />
+                    <text
+                      x={padding.left - 12}
+                      y={y + 4}
+                      textAnchor="end"
+                      fontSize="11"
+                      fill="#64748B"
+                    >
+                      {formatNumber((maxValue * percent) / 100)}
+                    </text>
+                    <text
+                      x={width - padding.right + 12}
+                      y={y + 4}
+                      fontSize="11"
+                      fill="#059669"
+                    >
+                      {percent} %
+                    </text>
+                  </g>
+                );
+              })}
+
+              <line
+                x1={padding.left}
+                x2={width - padding.right}
+                y1={padding.top + plotHeight * 0.2}
+                y2={padding.top + plotHeight * 0.2}
+                stroke="#F59E0B"
+                strokeWidth="2"
+                strokeDasharray="8 6"
+              />
+
+              {displayedRows.map((row, index) => {
+                const salesAmount = Number(row.total_sales_amount || 0);
+                const barHeight =
+                  maxValue > 0 ? (salesAmount / maxValue) * plotHeight : 0;
+                const centerX =
+                  padding.left + slotWidth * index + slotWidth / 2;
+                const x = centerX - barWidth / 2;
+                const y = padding.top + plotHeight - barHeight;
+                const label = String(row.product_name || "").slice(0, 18);
+
+                return (
+                  <g key={row.product_id}>
+                    <rect
+                      x={x}
+                      y={y}
+                      width={barWidth}
+                      height={barHeight}
+                      rx="8"
+                      fill="url(#paretoBars)"
+                    >
+                      <title>
+                        {row.product_name}: {formatMoney(salesAmount)}
+                      </title>
+                    </rect>
+                    <text
+                      x={centerX}
+                      y={height - padding.bottom + 20}
+                      textAnchor="end"
+                      transform={`rotate(-38 ${centerX} ${
+                        height - padding.bottom + 20
+                      })`}
+                      fontSize="11"
+                      fill="#475569"
+                    >
+                      {label}
+                    </text>
+                  </g>
+                );
+              })}
+
+              <path
+                d={cumulativePath}
+                fill="none"
+                stroke="#059669"
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              {points.map((point, index) => (
+                <g key={displayedRows[index].product_id}>
+                  <circle
+                    cx={point.x}
+                    cy={point.y}
+                    r="6"
+                    fill="#FFFFFF"
+                    stroke="#059669"
+                    strokeWidth="3"
+                  />
+                  <text
+                    x={point.x}
+                    y={point.y - 12}
+                    textAnchor="middle"
+                    fontSize="11"
+                    fontWeight="700"
+                    fill="#047857"
+                  >
+                    {formatNumber(
+                      displayedRows[index].cumulative_sales_share_percent
+                    )}
+                    %
+                  </text>
+                </g>
+              ))}
+            </svg>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {displayedRows.slice(0, 5).map((row) => (
+              <div
+                key={row.product_id}
+                className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3"
+              >
+                <div className="text-xs font-semibold text-slate-500">
+                  Rang {row.rank_order}
                 </div>
-
-                <div className="space-y-2">
-                  <div className="h-3 rounded-full bg-slate-100">
-                    <div
-                      className="h-3 rounded-full bg-brand-500"
-                      style={{ width: `${width}%` }}
-                    />
-                  </div>
-                  <div className="h-2 rounded-full bg-slate-100">
-                    <div
-                      className="h-2 rounded-full bg-emerald-500"
-                      style={{ width: `${Math.min(cumulativeShare, 100)}%` }}
-                    />
-                  </div>
+                <div className="mt-1 truncate text-sm font-semibold text-slate-900">
+                  {row.product_name}
+                </div>
+                <div className="mt-1 text-xs text-slate-600">
+                  {formatMoney(row.total_sales_amount)} • cumul{" "}
+                  {formatPercent(row.cumulative_sales_share_percent)}
                 </div>
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
@@ -1357,9 +1411,6 @@ function CustomerBalanceBoardTable({
   onSubmit
 }) {
   const rows = Array.isArray(board?.rows) ? board.rows : [];
-  const monthlyTrend = Array.isArray(board?.monthly_trend)
-    ? board.monthly_trend
-    : [];
   const totals = board?.totals || {};
 
   function getBalanceClass(value) {
@@ -1383,7 +1434,8 @@ function CustomerBalanceBoardTable({
           Bilan clients
         </div>
         <div className="mb-5 text-sm text-slate-500">
-          Filtrer les factures et paiements par periode, client et depot.
+          Filtrer par periode, client et depot, puis consulter les totaux avant
+          le detail.
         </div>
 
         <form
@@ -1449,18 +1501,6 @@ function CustomerBalanceBoardTable({
           </div>
         </form>
       </div>
-
-      <MultiSeriesLineChart
-        title="Suivi mensuel factures emises / paiements recus"
-        subtitle="Comparaison superposee sur les six derniers mois du filtre selectionne."
-        rows={monthlyTrend}
-        series={[
-          { key: "invoiced_amount", label: "Factures emises", color: "#2563EB" },
-          { key: "payments_received", label: "Paiements recus", color: "#059669" }
-        ]}
-        valueFormatter={formatMoney}
-        emptyText="Aucune tendance client disponible"
-      />
 
       <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
         {rows.length === 0 ? (
@@ -2097,14 +2137,6 @@ export default function DashboardPage() {
   const stats = overviewData?.global_stats || {};
   const executiveSnapshot = overviewData?.executive_kpi_snapshot || {};
   const directionAnalytics = directionData || {};
-  const directionMonthlyRevenueTrend =
-    directionAnalytics?.monthly_revenue_trend || [];
-  const directionCollectionsTrend =
-    directionAnalytics?.collections_vs_invoices_trend || [];
-  const directionForecastVsActual = directionAnalytics?.ai_forecast_vs_actual || {
-    rows: []
-  };
-  const directionSalesByCity = directionAnalytics?.sales_by_city || [];
   const directionSalesByPointOfSale =
     directionAnalytics?.sales_by_point_of_sale || [];
   const directionSalesByWarehouse =
@@ -2117,12 +2149,6 @@ export default function DashboardPage() {
     products: [],
     cities: [],
     cells: []
-  };
-  const directionStockCoverage = directionAnalytics?.stock_coverage || [];
-  const directionReceivablesAging = directionAnalytics?.receivables_aging || {
-    summary: {},
-    buckets: [],
-    overdue_customers: []
   };
   const collectionOverview = collectionData || {};
   const collectionSummary = collectionOverview.summary || {};
@@ -2253,26 +2279,6 @@ export default function DashboardPage() {
   );
   const topPayingCustomers = commercialData?.top_paying_customers || [];
   const mostProfitableProducts = commercialData?.most_profitable_products || [];
-  const directionMonthlyRevenueSeries = useMemo(
-    () => [
-      { key: "invoiced_amount", label: "CA facture", color: "#2563EB" }
-    ],
-    []
-  );
-  const directionCollectionsSeries = useMemo(
-    () => [
-      { key: "invoiced_amount", label: "Factures emises", color: "#2563EB" },
-      { key: "payments_received", label: "Encaissements", color: "#059669" }
-    ],
-    []
-  );
-  const directionForecastSeries = useMemo(
-    () => [
-      { key: "invoiced_amount", label: "Ventes reelles", color: "#2563EB" },
-      { key: "ai_sales_forecast_amount", label: "Prevision IA", color: "#7C3AED" }
-    ],
-    []
-  );
   const selectedCollectionCustomer = useMemo(
     () =>
       sortedDashboardCustomers.find(
@@ -2892,21 +2898,20 @@ export default function DashboardPage() {
                   Analyse DG prioritaire
                 </div>
                 <div className="mt-1 text-sm text-slate-500">
-                  Filtres communs pour les graphes de pilotage: ventes, recouvrement, marge, stock, creances et depenses.
+                  Filtres communs pour les analyses commerciales, les depenses,
+                  la rentabilite et la repartition geographique.
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {[
-                    "CA mensuel",
-                    "Factures / paiements",
-                    "Ventes par ville et client",
+                    "Evolution sur 6 mois",
+                    "Ventes par point de vente",
+                    "Depenses par categorie",
+                    "Heatmap produit x ville",
                     "Pareto produits",
                     "Marge produits",
-                    "Carte et heatmap",
-                    "Couverture stock",
-                    "Depenses",
-                    "Creances",
-                    "Prevision IA",
-                    "Performance depots"
+                    "Performance depots",
+                    "Bilan clients",
+                    "Carte geographique"
                   ].map((label) => (
                     <span
                       key={label}
@@ -2988,62 +2993,57 @@ export default function DashboardPage() {
             action={directionChartActions.executiveComparison}
           />
 
+          <HorizontalBarChart
+            title="Ventes par point de vente"
+            rows={directionSalesByPointOfSale}
+            labelKey="business_name"
+            valueKey="total_sales_amount"
+            helperText="Prioriser les magasins et pharmacies a suivre."
+            colorClass="bg-brand-500"
+            valueFormatter={formatMoney}
+            emptyText="Aucun point de vente sur la periode"
+            action={directionChartActions.salesByCustomer}
+          />
+
+          <ExpenseDonutChart
+            title="Depenses par categorie"
+            rows={directionExpensesByCategory}
+            emptyText="Aucune depense sur la periode"
+            action={directionChartActions.expensesByCategory}
+          />
+
+          <ProductCityHeatmap
+            title="Heatmap produit x ville"
+            subtitle="Voir quels produits fonctionnent le mieux dans quelles villes."
+            data={directionHeatmap}
+            filterSummary={{
+              periodLabel: formatPeriodRange(
+                directionFilters.start_date,
+                directionFilters.end_date
+              ),
+              warehouseLabel:
+                warehouses.find(
+                  (warehouse) =>
+                    String(warehouse.id) === String(directionFilters.warehouse_id)
+                )?.name || "Tous les depots",
+              chainLabel: "Toutes les chaines",
+              channelLabel: "Tous les canaux"
+            }}
+            formatMoney={formatMoney}
+            formatNumber={formatNumber}
+            formatPercent={formatPercent}
+            emptyText="Aucune heatmap produit x ville disponible"
+            action={directionChartActions.heatmap}
+          />
+
+          <ParetoChart
+            title="Diagramme de Pareto des produits"
+            subtitle="Barres de chiffre d'affaires et courbe de contribution cumulee pour identifier les produits qui portent 80 % des ventes."
+            rows={directionProductPareto}
+            action={directionChartActions.productPareto}
+          />
+
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <MultiSeriesLineChart
-              title="Courbe du chiffre d'affaires mensuel"
-              subtitle="Voir la croissance ou le ralentissement sur la periode filtree."
-              rows={directionMonthlyRevenueTrend}
-              series={directionMonthlyRevenueSeries}
-              valueFormatter={formatMoney}
-              emptyText="Aucune courbe de chiffre d'affaires disponible"
-              action={directionChartActions.revenueTrend}
-            />
-
-            <MultiSeriesLineChart
-              title="Encaissements contre factures emises"
-              subtitle="Detecter rapidement un probleme de recouvrement par ecart entre facture et cash."
-              rows={directionCollectionsTrend}
-              series={directionCollectionsSeries}
-              valueFormatter={formatMoney}
-              emptyText="Aucune comparaison factures / encaissements disponible"
-              action={directionChartActions.collectionsTrend}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <HorizontalBarChart
-              title="Ventes par ville"
-              rows={directionSalesByCity}
-              labelKey="city"
-              valueKey="total_sales_amount"
-              helperText="Identifier les marches les plus performants."
-              colorClass="bg-emerald-500"
-              valueFormatter={formatMoney}
-              emptyText="Aucune vente par ville sur la periode"
-              action={directionChartActions.salesByCity}
-            />
-
-            <HorizontalBarChart
-              title="Ventes par point de vente"
-              rows={directionSalesByPointOfSale}
-              labelKey="business_name"
-              valueKey="total_sales_amount"
-              helperText="Prioriser les magasins et pharmacies a suivre."
-              colorClass="bg-brand-500"
-              valueFormatter={formatMoney}
-              emptyText="Aucun point de vente sur la periode"
-              action={directionChartActions.salesByCustomer}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <ParetoChart
-              title="Diagramme de Pareto des produits"
-              subtitle="Identifier les references qui portent l'essentiel du chiffre d'affaires."
-              rows={directionProductPareto}
-              action={directionChartActions.productPareto}
-            />
-
             <HorizontalBarChart
               title="Marge nette estimee par produit"
               rows={directionNetMarginByProduct}
@@ -3054,113 +3054,6 @@ export default function DashboardPage() {
               valueFormatter={formatMoney}
               emptyText="Aucune marge produit disponible"
               action={directionChartActions.productMargin}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <PointOfSaleCoverageMap
-              title="Carte geographique des points de vente"
-              subtitle="Visualiser la couverture territoriale active sur les villes servies."
-              rows={directionPointMap}
-              action={directionChartActions.pointMap}
-            />
-
-            <ProductCityHeatmap
-              title="Heatmap produit x ville"
-              subtitle="Voir quels produits fonctionnent le mieux dans quelles villes."
-              data={directionHeatmap}
-              filterSummary={{
-                periodLabel: formatPeriodRange(
-                  directionFilters.start_date,
-                  directionFilters.end_date
-                ),
-                warehouseLabel:
-                  warehouses.find(
-                    (warehouse) =>
-                      String(warehouse.id) === String(directionFilters.warehouse_id)
-                  )?.name || "Tous les depots",
-                chainLabel: "Toutes les chaines",
-                channelLabel: "Tous les canaux"
-              }}
-              formatMoney={formatMoney}
-              formatNumber={formatNumber}
-              formatPercent={formatPercent}
-              emptyText="Aucune heatmap produit x ville disponible"
-              action={directionChartActions.heatmap}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <HorizontalBarChart
-              title="Couverture des stocks"
-              rows={directionStockCoverage}
-              labelKey="product_name"
-              valueKey="coverage_days"
-              helperText="Anticiper les ruptures avec le nombre estimatif de jours de couverture par produit."
-              colorClass="bg-amber-500"
-              valueFormatter={(value) =>
-                value === null || value === undefined ? "-" : `${formatNumber(value)} j`
-              }
-              emptyText="Aucune couverture stock exploitable"
-              action={directionChartActions.stockCoverage}
-            />
-
-            <ExpenseDonutChart
-              title="Depenses par categorie"
-              rows={directionExpensesByCategory}
-              emptyText="Aucune depense sur la periode"
-              action={directionChartActions.expensesByCategory}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <HorizontalBarChart
-              title="Balance agee des creances"
-              rows={directionReceivablesAging.buckets || []}
-              labelKey="label"
-              valueKey="amount"
-              helperText="Identifier les paiements en retard par tranche d'anciennete."
-              colorClass="bg-amber-500"
-              valueFormatter={formatMoney}
-              emptyText="Aucune creance ouverte"
-              action={directionChartActions.receivablesAging}
-            />
-
-            <MultiSeriesLineChart
-              title="Prevision IA contre ventes reelles"
-              subtitle="Comparer les ventes facturees a la derniere baseline IA disponible."
-              rows={directionForecastVsActual.rows || []}
-              series={directionForecastSeries}
-              valueFormatter={formatMoney}
-              emptyText="Aucune comparaison prevision IA / ventes disponible"
-              action={directionChartActions.forecastVsActual}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <TableCard
-              title="Clients les plus en retard"
-              rows={directionReceivablesAging.overdue_customers || []}
-              emptyText="Aucun client en retard"
-              columns={[
-                { key: "business_name", label: "Client" },
-                { key: "city", label: "Ville" },
-                {
-                  key: "open_invoices_count",
-                  label: "Factures",
-                  render: (row) => formatNumber(row.open_invoices_count)
-                },
-                {
-                  key: "max_days_overdue",
-                  label: "Retard max",
-                  render: (row) => `${Number(row.max_days_overdue || 0)} j`
-                },
-                {
-                  key: "total_balance_due",
-                  label: "Solde",
-                  render: (row) => formatMoney(row.total_balance_due)
-                }
-              ]}
             />
 
             <TableCard
@@ -3219,27 +3112,6 @@ export default function DashboardPage() {
             emptyText="Aucun client compare"
             action={directionChartActions.topCustomers}
           />
-
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-            <HeroMetricCard
-              title="Chiffre d'affaires facture"
-              value={formatMoney(stats.total_sales_amount)}
-              subtitle={`${Number(stats.total_invoices || 0)} facture(s) emise(s)`}
-              tone="brand"
-            />
-            <HeroMetricCard
-              title="Profit brut"
-              value={formatMoney(stats.gross_profit_amount)}
-              subtitle={`Marge brute ${formatPercent(stats.gross_margin_percent)}`}
-              tone="emerald"
-            />
-            <HeroMetricCard
-              title="Paiements clients"
-              value={formatMoney(stats.total_payments_received)}
-              subtitle={`${formatMoney(stats.total_receivables)} encore en attente`}
-              tone="amber"
-            />
-          </div>
 
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
             {directionSignals.map((signal) => (
@@ -3307,6 +3179,13 @@ export default function DashboardPage() {
               ]}
             />
           </div>
+
+          <PointOfSaleCoverageMap
+            title="Carte geographique des points de vente"
+            subtitle="Visualiser en dernier la couverture territoriale active sur les villes servies."
+            rows={directionPointMap}
+            action={directionChartActions.pointMap}
+          />
         </div>
       ) : null}
 

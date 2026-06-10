@@ -557,8 +557,28 @@ export default function StockPage() {
         notes: entryForm.notes.trim()
       };
 
-      await api.post("/stock/entry", payload);
-      setSuccessMessage("Entrée de stock enregistrée avec succès.");
+      const response = await api.post("/stock/entry", payload);
+      const accounting = response.data?.data?.accounting || null;
+
+      if (accounting?.status === "posted") {
+        setSuccessMessage(
+          `Entrée de stock enregistrée et comptabilisée (${accounting.entry_number}).`
+        );
+      } else if (accounting?.status === "skipped") {
+        setSuccessMessage(
+          `Entrée de stock enregistrée. Comptabilisation ignorée : ${
+            accounting.reason || "paramétrage incomplet"
+          }.`
+        );
+      } else if (accounting?.status === "error") {
+        setSuccessMessage(
+          `Entrée de stock enregistrée. Comptabilisation en erreur : ${
+            accounting.reason || "erreur inconnue"
+          }.`
+        );
+      } else {
+        setSuccessMessage("Entrée de stock enregistrée avec succès.");
+      }
       resetForms();
       await fetchStockByWarehouse(selectedWarehouse);
       await fetchMovements();
