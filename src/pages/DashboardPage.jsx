@@ -203,6 +203,7 @@ function getDefaultCollectionFilters() {
     warehouse_id: "",
     customer_id: "",
     customer_city: "",
+    entry_type: "all",
     top_products: "8",
     top_cities: "8"
   };
@@ -1861,6 +1862,7 @@ export default function DashboardPage() {
   };
   const collectionOverview = collectionData || {};
   const collectionSummary = collectionOverview.summary || {};
+  const collectionIssuedInvoices = collectionOverview.issued_invoices || [];
   const collectionUnpaidInvoices = collectionOverview.unpaid_invoices || [];
   const collectionPayments = collectionOverview.payments || [];
   const collectionHeatmap = collectionOverview.product_city_heatmap || {
@@ -2298,6 +2300,10 @@ export default function DashboardPage() {
       unpaidInvoices: {
         to: buildCollectionsReportPath("customer_aging"),
         label: "Voir creances"
+      },
+      issuedInvoices: {
+        to: buildCollectionsReportPath("sales_detail"),
+        label: "Voir factures"
       },
       payments: {
         to: buildCollectionsReportPath("receipts_journal"),
@@ -3026,8 +3032,8 @@ export default function DashboardPage() {
                   Suivi recouvrement et paiements
                 </div>
                 <div className="mt-1 text-sm text-slate-500">
-                  Filtrer les factures non encore payees, les paiements effectues et
-                  la heatmap produit x ville par periode, client, ville et depot.
+                  Filtrer par date les factures emises et les paiements recus,
+                  puis consulter les totaux avant le detail.
                 </div>
               </div>
 
@@ -3040,7 +3046,7 @@ export default function DashboardPage() {
 
             <form
               onSubmit={handleApplyCollectionFilters}
-              className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-7"
+              className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4"
             >
               <FilterField label="Date debut">
                 <input
@@ -3110,6 +3116,19 @@ export default function DashboardPage() {
                 </select>
               </FilterField>
 
+              <FilterField label="Afficher">
+                <select
+                  name="entry_type"
+                  value={collectionFilters.entry_type}
+                  onChange={handleCollectionFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="all">Factures et paiements</option>
+                  <option value="invoices">Factures emises</option>
+                  <option value="payments">Paiements recus</option>
+                </select>
+              </FilterField>
+
               <FilterField label="Top produits heatmap">
                 <select
                   name="top_products"
@@ -3154,55 +3173,56 @@ export default function DashboardPage() {
 
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
             <StatCard
-              title="Factures non payees"
-              value={formatNumber(collectionSummary.total_unpaid_invoices)}
-              subtitle={`${formatMoney(collectionSummary.total_unpaid_amount)} a recouvrer`}
+              title="Total factures emises"
+              value={formatMoney(collectionSummary.total_invoiced_amount)}
+              subtitle={`${formatNumber(collectionSummary.total_invoices)} facture(s)`}
             />
             <StatCard
-              title="Factures echues"
-              value={formatNumber(collectionSummary.overdue_invoices_count)}
-              subtitle={`${formatMoney(collectionSummary.overdue_balance_amount)} en retard`}
+              title="Total paiements recus"
+              value={formatMoney(collectionSummary.total_payments_amount)}
+              subtitle={`${formatNumber(collectionSummary.total_payments)} paiement(s)`}
             />
             <StatCard
-              title="Paiements effectues"
-              value={formatNumber(collectionSummary.total_payments)}
-              subtitle={`${formatMoney(collectionSummary.total_payments_amount)} encaisses`}
+              title="Ecart facture / encaisse"
+              value={formatMoney(collectionSummary.invoiced_payment_gap)}
+              subtitle={`Taux d encaissement ${formatPercent(
+                collectionSummary.collection_rate_percent
+              )}`}
             />
             <StatCard
-              title="Portee filtree"
-              value={formatNumber(
-                Math.max(
-                  Number(collectionSummary.total_unpaid_customers || 0),
-                  Number(collectionSummary.total_payment_customers || 0)
-                )
-              )}
+              title="Solde a recouvrer"
+              value={formatMoney(collectionSummary.total_unpaid_amount)}
               subtitle={`${formatNumber(
-                Math.max(
-                  Number(collectionSummary.total_unpaid_cities || 0),
-                  Number(collectionSummary.total_payment_cities || 0)
-                )
-              )} ville(s) concernees`}
+                collectionSummary.total_unpaid_invoices
+              )} facture(s), dont ${formatNumber(
+                collectionSummary.overdue_invoices_count
+              )} echue(s)`}
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <div className="space-y-4">
+          <div
+            className={`grid grid-cols-1 gap-6 ${
+              collectionFilters.entry_type === "all" ? "xl:grid-cols-2" : ""
+            }`}
+          >
+            {collectionFilters.entry_type !== "payments" ? (
+              <div className="space-y-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="text-lg font-semibold text-slate-900">
-                    Factures non encore payees
+                    Factures emises
                   </div>
                   <div className="mt-1 text-sm text-slate-500">
-                    Liste des creances encore ouvertes sur le filtre actif.
+                    Toutes les factures emises sur la periode filtree.
                   </div>
                 </div>
-                <CardActionLink action={collectionChartActions.unpaidInvoices} />
+                <CardActionLink action={collectionChartActions.issuedInvoices} />
               </div>
 
               <TableCard
                 title=""
-                rows={collectionUnpaidInvoices}
-                emptyText="Aucune facture impayee sur ce filtre"
+                rows={collectionIssuedInvoices}
+                emptyText="Aucune facture emise sur ce filtre"
                 columns={[
                   { key: "invoice_number", label: "Facture" },
                   {
@@ -3231,27 +3251,31 @@ export default function DashboardPage() {
                     )
                   },
                   {
+                    key: "total_amount",
+                    label: "Montant",
+                    render: (row) => formatMoney(row.total_amount)
+                  },
+                  {
+                    key: "paid_amount",
+                    label: "Paye",
+                    render: (row) => formatMoney(row.paid_amount)
+                  },
+                  {
                     key: "balance_due",
                     label: "Solde",
                     render: (row) => formatMoney(row.balance_due)
-                  },
-                  {
-                    key: "days_overdue",
-                    label: "Retard",
-                    render: (row) =>
-                      row.days_overdue === null
-                        ? "-"
-                        : `${Number(row.days_overdue || 0)} j`
                   }
                 ]}
               />
             </div>
+            ) : null}
 
-            <div className="space-y-4">
+            {collectionFilters.entry_type !== "invoices" ? (
+              <div className="space-y-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="text-lg font-semibold text-slate-900">
-                    Paiements effectues
+                    Paiements recus
                   </div>
                   <div className="mt-1 text-sm text-slate-500">
                     Encaissements recus sur la periode et le perimetre choisis.
@@ -3295,6 +3319,55 @@ export default function DashboardPage() {
                 ]}
               />
             </div>
+            ) : null}
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-lg font-semibold text-slate-900">
+                  Factures non encore payees
+                </div>
+                <div className="mt-1 text-sm text-slate-500">
+                  Creances encore ouvertes, independamment du type de resultat affiche.
+                </div>
+              </div>
+              <CardActionLink action={collectionChartActions.unpaidInvoices} />
+            </div>
+
+            <TableCard
+              title=""
+              rows={collectionUnpaidInvoices}
+              emptyText="Aucune facture impayee sur ce filtre"
+              columns={[
+                { key: "invoice_number", label: "Facture" },
+                {
+                  key: "invoice_date",
+                  label: "Date",
+                  render: (row) => formatDate(row.invoice_date)
+                },
+                {
+                  key: "due_date",
+                  label: "Echeance",
+                  render: (row) => formatDate(row.due_date)
+                },
+                { key: "customer_name", label: "Client" },
+                { key: "customer_city", label: "Ville" },
+                {
+                  key: "balance_due",
+                  label: "Solde",
+                  render: (row) => formatMoney(row.balance_due)
+                },
+                {
+                  key: "days_overdue",
+                  label: "Retard",
+                  render: (row) =>
+                    row.days_overdue === null
+                      ? "-"
+                      : `${Number(row.days_overdue || 0)} j`
+                }
+              ]}
+            />
           </div>
 
           <ProductCityHeatmap
