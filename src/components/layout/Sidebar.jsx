@@ -28,7 +28,10 @@ import {
   ShieldAlert,
   DatabaseZap,
   Radar,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Sparkles,
+  ShieldCheck,
+  X
 } from "lucide-react";
 
 const primarySections = [
@@ -76,6 +79,7 @@ const accountingLinks = [
 ];
 
 const aiLinks = [
+  { to: "/strategic-ai", label: "Assistant strategique", icon: Sparkles },
   { to: "/ai-control-tower", label: "Tour de controle IA", icon: Radar },
   { to: "/ai-reasoning", label: "Assistant Direction IA", icon: Brain },
   { to: "/kabot", label: "KABOT Dashboard", icon: ShieldAlert },
@@ -94,6 +98,10 @@ const aiLinks = [
     label: "Regles metier IA",
     icon: SlidersHorizontal
   }
+];
+
+const governanceLinks = [
+  { to: "/audit-log", label: "Journal d'audit", icon: ShieldCheck }
 ];
 
 const secondarySections = [
@@ -143,10 +151,11 @@ const secondarySections = [
   }
 ];
 
-function SidebarLink({ to, label, icon: Icon, nested = false }) {
+function SidebarLink({ to, label, icon: Icon, nested = false, onNavigate }) {
   return (
     <NavLink
       to={to}
+      onClick={onNavigate}
       className={({ isActive }) =>
         `flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition ${
           nested ? "ml-3" : ""
@@ -171,20 +180,20 @@ function SidebarSectionTitle({ children }) {
   );
 }
 
-function SidebarSection({ title, links }) {
+function SidebarSection({ title, links, onNavigate }) {
   return (
     <div>
       <SidebarSectionTitle>{title}</SidebarSectionTitle>
       <div className="space-y-2">
         {links.map((item) => (
-          <SidebarLink key={item.to} {...item} />
+          <SidebarLink key={item.to} {...item} onNavigate={onNavigate} />
         ))}
       </div>
     </div>
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar({ mobile = false, onClose }) {
   const location = useLocation();
 
   const accountingSectionActive = accountingLinks.some((item) =>
@@ -199,13 +208,31 @@ export default function Sidebar() {
   const [aiOpen, setAiOpen] = useState(aiSectionActive);
 
   return (
-    <aside className="w-72 shrink-0 border-r border-slate-200 bg-white">
+    <aside
+      className={`h-full w-72 shrink-0 overflow-y-auto border-r border-slate-200 bg-white ${
+        mobile ? "shadow-2xl" : ""
+      }`}
+    >
       <div className="border-b border-slate-200 px-6 py-6">
-        <div className="text-brand-600 text-xs font-semibold uppercase tracking-[0.2em]">
-          KIVU AGRO BIO
-        </div>
-        <div className="mt-2 text-2xl font-bold text-slate-900">
-          Gestion Pro
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-brand-600 text-xs font-semibold uppercase tracking-[0.2em]">
+              KIVU AGRO BIO
+            </div>
+            <div className="mt-2 text-2xl font-bold text-slate-900">
+              Gestion Pro
+            </div>
+          </div>
+          {mobile ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl p-2 text-slate-500 hover:bg-slate-100"
+              aria-label="Fermer le menu"
+            >
+              <X size={20} />
+            </button>
+          ) : null}
         </div>
         <div className="mt-1 text-sm text-slate-500">
           Pilotage, relation client, operations, comptabilite et intelligence
@@ -215,7 +242,11 @@ export default function Sidebar() {
 
       <nav className="space-y-1 p-4">
         {primarySections.map((section) => (
-          <SidebarSection key={section.title} {...section} />
+          <SidebarSection
+            key={section.title}
+            {...section}
+            onNavigate={onClose}
+          />
         ))}
 
         <div className="pt-2">
@@ -240,7 +271,12 @@ export default function Sidebar() {
           {aiOpen ? (
             <div className="mt-2 space-y-2 border-l border-slate-200 pl-2">
               {aiLinks.map((item) => (
-                <SidebarLink key={item.to} {...item} nested />
+                <SidebarLink
+                  key={item.to}
+                  {...item}
+                  nested
+                  onNavigate={onClose}
+                />
               ))}
             </div>
           ) : null}
@@ -272,14 +308,29 @@ export default function Sidebar() {
           {accountingOpen ? (
             <div className="mt-2 space-y-2 border-l border-slate-200 pl-2">
               {accountingLinks.map((item) => (
-                <SidebarLink key={item.to} {...item} nested />
+                <SidebarLink
+                  key={item.to}
+                  {...item}
+                  nested
+                  onNavigate={onClose}
+                />
               ))}
             </div>
           ) : null}
         </div>
 
+        <SidebarSection
+          title="Gouvernance"
+          links={governanceLinks}
+          onNavigate={onClose}
+        />
+
         {secondarySections.map((section) => (
-          <SidebarSection key={section.title} {...section} />
+          <SidebarSection
+            key={section.title}
+            {...section}
+            onNavigate={onClose}
+          />
         ))}
       </nav>
     </aside>

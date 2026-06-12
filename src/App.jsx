@@ -35,11 +35,16 @@ import IncomeStatementPage from "./pages/IncomeStatementPage";
 import BalanceSheetPage from "./pages/BalanceSheetPage";
 import KabotDashboardPage from "./pages/KabotDashboardPage";
 import CompanyKnowledgePage from "./pages/CompanyKnowledgePage";
+import StrategicAIPage from "./pages/StrategicAIPage";
+import AuditLogPage from "./pages/AuditLogPage";
+import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter
+      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+    >
       <Routes>
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
@@ -83,6 +88,7 @@ export default function App() {
           <Route path="balance-sheet" element={<BalanceSheetPage />} />
 
           <Route path="ai-reasoning" element={<AIReasoningPage />} />
+          <Route path="strategic-ai" element={<StrategicAIPage />} />
           <Route path="ai-control-tower" element={<AIControlTowerPage />} />
           <Route path="ai-scoring" element={<AIScoringDashboardPage />} />
           <Route path="ai-business-rules" element={<AIBusinessRulesPage />} />
@@ -91,6 +97,8 @@ export default function App() {
             path="company-knowledge"
             element={<CompanyKnowledgePage />}
           />
+          <Route path="audit-log" element={<AuditLogPage />} />
+          <Route path="login" element={<LoginPage />} />
 
           <Route path="*" element={<NotFoundPage />} />
         </Route>
