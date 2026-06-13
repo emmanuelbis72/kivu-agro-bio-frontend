@@ -1766,6 +1766,7 @@ export default function DashboardPage() {
   const [directionLoading, setDirectionLoading] = useState(false);
   const [collectionLoading, setCollectionLoading] = useState(false);
   const [collectionExporting, setCollectionExporting] = useState(false);
+  const [activeCollectionAlert, setActiveCollectionAlert] = useState("all");
   const [customerBalanceLoading, setCustomerBalanceLoading] = useState(false);
   const [commercialRefreshing, setCommercialRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -2083,6 +2084,7 @@ export default function DashboardPage() {
     try {
       setCollectionLoading(true);
       setError("");
+      setActiveCollectionAlert("all");
       await fetchCollectionsOverview(collectionFilters);
     } catch (err) {
       setError(
@@ -2093,6 +2095,38 @@ export default function DashboardPage() {
     } finally {
       setCollectionLoading(false);
     }
+  }
+
+  async function handleResetCollectionFilters() {
+    const defaultFilters = getDefaultCollectionFilters();
+
+    try {
+      setCollectionLoading(true);
+      setError("");
+      setCollectionFilters(defaultFilters);
+      setActiveCollectionAlert("all");
+      await fetchCollectionsOverview(defaultFilters);
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de reinitialiser le suivi recouvrement."
+      );
+    } finally {
+      setCollectionLoading(false);
+    }
+  }
+
+  function handleCollectionAlertClick(level) {
+    setActiveCollectionAlert((currentLevel) =>
+      currentLevel === level ? "all" : level
+    );
+
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById("collection-open-invoices")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   async function handleExportCollectionsPdf() {
@@ -2111,6 +2145,10 @@ export default function DashboardPage() {
           params.set(key, value);
         }
       });
+      if (activeCollectionAlert !== "all") {
+        params.set("alert_level", activeCollectionAlert);
+        params.set("payment_status", "open");
+      }
 
       const response = await api.get(
         `/reports/collections/export/pdf?${params.toString()}`,
@@ -2220,6 +2258,12 @@ export default function DashboardPage() {
     [];
   const collectionPaidInvoices = collectionOverview.paid_invoices || [];
   const collectionPayments = collectionOverview.payments || [];
+  const visibleCollectionOpenInvoices =
+    activeCollectionAlert === "all"
+      ? collectionOpenInvoices
+      : collectionOpenInvoices.filter(
+          (invoice) => invoice.alert_level === activeCollectionAlert
+        );
   const collectionHeatmap = collectionOverview.product_city_heatmap || {
     products: [],
     cities: [],
@@ -2260,15 +2304,6 @@ export default function DashboardPage() {
       [...customers].sort((left, right) =>
         compareAlphabetic(left.business_name, right.business_name)
       ),
-    [customers]
-  );
-  const customerCityOptions = useMemo(
-    () =>
-      [...new Set(
-        customers
-          .map((customer) => String(customer.city || "").trim())
-          .filter(Boolean)
-      )].sort((left, right) => compareAlphabetic(left, right)),
     [customers]
   );
   const heatmapChainOptions = useMemo(
@@ -2638,7 +2673,10 @@ export default function DashboardPage() {
         to: buildCollectionsReportPath("collections", {
           as_of_date: collectionFilters.as_of_date,
           payment_status: "open",
-          alert_level: collectionFilters.alert_level || undefined
+          alert_level:
+            activeCollectionAlert !== "all"
+              ? activeCollectionAlert
+              : collectionFilters.alert_level || undefined
         }),
         label: "Voir l'etat"
       },
@@ -2658,7 +2696,7 @@ export default function DashboardPage() {
         label: "Voir detail"
       }
     }),
-    [collectionFilters]
+    [activeCollectionAlert, collectionFilters]
   );
   const commercialLeaderSignals = useMemo(
     () => [
@@ -3270,8 +3308,8 @@ export default function DashboardPage() {
                   Suivi recouvrement et paiements
                 </div>
                 <div className="mt-1 text-sm text-slate-500">
-                  Filtrer par date les factures emises et les paiements recus,
-                  puis consulter les totaux avant le detail.
+                  Choisissez une periode, un client, un depot ou un statut.
+                  Les couleurs d'alerte sont calculees automatiquement a la date du jour.
                 </div>
               </div>
 
@@ -3296,9 +3334,9 @@ export default function DashboardPage() {
 
             <form
               onSubmit={handleApplyCollectionFilters}
-              className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4"
+              className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5"
             >
-              <FilterField label="Date debut">
+              <FilterField label="Factures emises du">
                 <input
                   type="date"
                   name="start_date"
@@ -3308,21 +3346,11 @@ export default function DashboardPage() {
                 />
               </FilterField>
 
-              <FilterField label="Date fin">
+              <FilterField label="Au">
                 <input
                   type="date"
                   name="end_date"
                   value={collectionFilters.end_date}
-                  onChange={handleCollectionFilterChange}
-                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-                />
-              </FilterField>
-
-              <FilterField label="Date de reference alertes">
-                <input
-                  type="date"
-                  name="as_of_date"
-                  value={collectionFilters.as_of_date}
                   onChange={handleCollectionFilterChange}
                   className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                 />
@@ -3344,22 +3372,6 @@ export default function DashboardPage() {
                 </select>
               </FilterField>
 
-              <FilterField label="Ville client">
-                <select
-                  name="customer_city"
-                  value={collectionFilters.customer_city}
-                  onChange={handleCollectionFilterChange}
-                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-                >
-                  <option value="">Toutes les villes</option>
-                  {customerCityOptions.map((city) => (
-                    <option key={city} value={city}>
-                      {city}
-                    </option>
-                  ))}
-                </select>
-              </FilterField>
-
               <FilterField label="Depot">
                 <select
                   name="warehouse_id"
@@ -3376,20 +3388,7 @@ export default function DashboardPage() {
                 </select>
               </FilterField>
 
-              <FilterField label="Afficher">
-                <select
-                  name="entry_type"
-                  value={collectionFilters.entry_type}
-                  onChange={handleCollectionFilterChange}
-                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-                >
-                  <option value="all">Factures et paiements</option>
-                  <option value="invoices">Factures emises</option>
-                  <option value="payments">Paiements recus</option>
-                </select>
-              </FilterField>
-
-              <FilterField label="Statut de paiement">
+              <FilterField label="Statut">
                 <select
                   name="payment_status"
                   value={collectionFilters.payment_status}
@@ -3404,60 +3403,23 @@ export default function DashboardPage() {
                 </select>
               </FilterField>
 
-              <FilterField label="Niveau d'alerte">
-                <select
-                  name="alert_level"
-                  value={collectionFilters.alert_level}
-                  onChange={handleCollectionFilterChange}
-                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+              <div className="flex items-end gap-3">
+                <button
+                  type="submit"
+                  disabled={collectionLoading}
+                  className="flex-1 rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
                 >
-                  <option value="all">Toutes les alertes</option>
-                  <option value="green">Vert - 0 a 21 jours</option>
-                  <option value="light_green">Vert clair - 22 a 29 jours</option>
-                  <option value="orange">Orange - 30 a 44 jours</option>
-                  <option value="red">Rouge - 45 jours et plus</option>
-                </select>
-              </FilterField>
-
-              <FilterField label="Top produits heatmap">
-                <select
-                  name="top_products"
-                  value={collectionFilters.top_products}
-                  onChange={handleCollectionFilterChange}
-                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                  Appliquer
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetCollectionFilters}
+                  disabled={collectionLoading}
+                  className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 disabled:opacity-60"
                 >
-                  {[6, 8, 10, 12].map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
-              </FilterField>
-
-              <FilterField label="Top villes heatmap">
-                <div className="flex gap-3">
-                  <select
-                    name="top_cities"
-                    value={collectionFilters.top_cities}
-                    onChange={handleCollectionFilterChange}
-                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
-                  >
-                    {[6, 8, 10, 12].map((value) => (
-                      <option key={value} value={value}>
-                        {value}
-                      </option>
-                    ))}
-                  </select>
-
-                  <button
-                    type="submit"
-                    disabled={collectionLoading}
-                    className="rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
-                  >
-                    Filtrer
-                  </button>
-                </div>
-              </FilterField>
+                  Reinitialiser
+                </button>
+              </div>
             </form>
           </div>
 
@@ -3524,11 +3486,19 @@ export default function DashboardPage() {
                 amount: collectionSummary.red_balance_amount
               }
             ].map((item) => (
-              <div
+              <button
+                type="button"
                 key={item.level}
-                className={`rounded-3xl p-5 ${getCollectionAlertClass(
+                onClick={() => handleCollectionAlertClick(item.level)}
+                aria-pressed={activeCollectionAlert === item.level}
+                aria-controls="collection-open-invoices"
+                className={`rounded-3xl p-5 text-left transition ${getCollectionAlertClass(
                   item.level
-                )}`}
+                )} ${
+                  activeCollectionAlert === item.level
+                    ? "ring-4 ring-slate-400 ring-offset-2"
+                    : "hover:-translate-y-0.5 hover:shadow-md"
+                }`}
               >
                 <div className="text-sm font-bold">{item.title}</div>
                 <div className="mt-3 text-2xl font-black">
@@ -3537,8 +3507,105 @@ export default function DashboardPage() {
                 <div className="mt-1 text-xs font-semibold">
                   {formatNumber(item.count)} facture(s) ouverte(s)
                 </div>
-              </div>
+                <div className="mt-3 text-xs font-bold underline">
+                  Voir les factures
+                </div>
+              </button>
             ))}
+          </div>
+
+          <div id="collection-open-invoices" className="scroll-mt-6 space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="text-xl font-bold text-slate-950">
+                    Factures a recouvrer
+                  </div>
+                  <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-bold text-white">
+                    {formatNumber(visibleCollectionOpenInvoices.length)}
+                  </span>
+                </div>
+                <div className="mt-1 text-sm text-slate-500">
+                  Factures non payees ou partiellement payees, classees par anciennete.
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                {activeCollectionAlert !== "all" ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveCollectionAlert("all")}
+                    className="rounded-full border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700"
+                  >
+                    Afficher toutes les alertes
+                  </button>
+                ) : null}
+                <CardActionLink action={collectionChartActions.unpaidInvoices} />
+              </div>
+            </div>
+
+            <TableCard
+              title=""
+              rows={visibleCollectionOpenInvoices}
+              emptyText="Aucune facture ouverte pour cette alerte"
+              getRowKey={(row) => row.invoice_id}
+              rowClassName={getCollectionRowClass}
+              columns={[
+                {
+                  key: "alert_level",
+                  label: "Alerte",
+                  render: (row) => (
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${getCollectionAlertClass(
+                        row.alert_level
+                      )}`}
+                    >
+                      {row.alert_label}
+                    </span>
+                  )
+                },
+                {
+                  key: "collection_age_days",
+                  label: "Age",
+                  render: (row) =>
+                    `${Number(row.collection_age_days || 0)} j`
+                },
+                { key: "invoice_number", label: "Facture" },
+                {
+                  key: "invoice_date",
+                  label: "Emission",
+                  render: (row) => formatDate(row.invoice_date)
+                },
+                { key: "customer_name", label: "Client" },
+                {
+                  key: "payment_status",
+                  label: "Paiement",
+                  render: (row) => (
+                    <span className="font-semibold text-slate-900">
+                      {row.payment_status_label}
+                    </span>
+                  )
+                },
+                {
+                  key: "total_amount",
+                  label: "Montant",
+                  render: (row) => formatMoney(row.total_amount)
+                },
+                {
+                  key: "paid_amount",
+                  label: "Paye",
+                  render: (row) => formatMoney(row.paid_amount)
+                },
+                {
+                  key: "balance_due",
+                  label: "Solde",
+                  render: (row) => (
+                    <span className="font-bold text-slate-950">
+                      {formatMoney(row.balance_due)}
+                    </span>
+                  )
+                }
+              ]}
+            />
           </div>
 
           <div
@@ -3640,86 +3707,6 @@ export default function DashboardPage() {
               />
             </div>
             ) : null}
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-lg font-semibold text-slate-900">
-                  Factures a recouvrer
-                </div>
-                <div className="mt-1 text-sm text-slate-500">
-                  Factures non payees ou partiellement payees, classees par anciennete.
-                </div>
-              </div>
-              <CardActionLink action={collectionChartActions.unpaidInvoices} />
-            </div>
-
-            <TableCard
-              title=""
-              rows={collectionOpenInvoices}
-              emptyText="Aucune facture ouverte sur ce filtre"
-              getRowKey={(row) => row.invoice_id}
-              rowClassName={getCollectionRowClass}
-              columns={[
-                {
-                  key: "alert_level",
-                  label: "Alerte",
-                  render: (row) => (
-                    <span
-                      className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${getCollectionAlertClass(
-                        row.alert_level
-                      )}`}
-                    >
-                      {row.alert_label}
-                    </span>
-                  )
-                },
-                {
-                  key: "collection_age_days",
-                  label: "Age",
-                  render: (row) =>
-                    `${Number(row.collection_age_days || 0)} j`
-                },
-                { key: "invoice_number", label: "Facture" },
-                {
-                  key: "invoice_date",
-                  label: "Emission",
-                  render: (row) => formatDate(row.invoice_date)
-                },
-                { key: "customer_name", label: "Client" },
-                { key: "customer_phone", label: "Telephone" },
-                { key: "commercial_name", label: "Commercial" },
-                {
-                  key: "payment_status",
-                  label: "Paiement",
-                  render: (row) => (
-                    <span className="font-semibold text-slate-900">
-                      {row.payment_status_label}
-                    </span>
-                  )
-                },
-                {
-                  key: "total_amount",
-                  label: "Montant",
-                  render: (row) => formatMoney(row.total_amount)
-                },
-                {
-                  key: "paid_amount",
-                  label: "Paye",
-                  render: (row) => formatMoney(row.paid_amount)
-                },
-                {
-                  key: "balance_due",
-                  label: "Solde",
-                  render: (row) => (
-                    <span className="font-bold text-slate-950">
-                      {formatMoney(row.balance_due)}
-                    </span>
-                  )
-                }
-              ]}
-            />
           </div>
 
           <ProductCityHeatmap
