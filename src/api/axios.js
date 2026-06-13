@@ -1,6 +1,8 @@
 import axios from "axios";
-
-const AUTH_TOKEN_KEY = "kab_auth_token";
+import {
+  AUTH_TOKEN_KEY,
+  clearSession
+} from "../utils/auth";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
@@ -9,8 +11,11 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
   const token = window.localStorage.getItem(AUTH_TOKEN_KEY);
+  const isAuthenticationRequest = ["/auth/login", "/auth/bootstrap"].some(
+    (path) => String(config.url || "").includes(path)
+  );
 
-  if (token) {
+  if (token && !isAuthenticationRequest) {
     config.headers.Authorization = `Bearer ${token}`;
   }
 
@@ -20,9 +25,11 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error?.response?.status === 401) {
-      window.localStorage.removeItem(AUTH_TOKEN_KEY);
-      window.localStorage.removeItem("kab_auth_user");
+    if (
+      error?.response?.status === 401 &&
+      window.localStorage.getItem(AUTH_TOKEN_KEY)
+    ) {
+      clearSession();
     }
 
     return Promise.reject(error);

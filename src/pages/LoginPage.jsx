@@ -11,6 +11,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const destination =
+    typeof location.state?.from === "string"
+      ? location.state.from
+      : "/strategic-ai";
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -20,7 +24,7 @@ export default function LoginPage() {
       setError("");
       const response = await api.post("/auth/login", { email, password });
       saveSession(response.data.data);
-      navigate(location.state?.from || "/strategic-ai", { replace: true });
+      navigate(destination, { replace: true });
     } catch (requestError) {
       setError(
         requestError?.response?.data?.message ||
@@ -57,6 +61,12 @@ export default function LoginPage() {
           <p className="mt-2 text-sm text-slate-500">
             Utilisez le compte cree par l'administrateur du systeme.
           </p>
+
+          {location.state?.message ? (
+            <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">
+              {location.state.message}
+            </div>
+          ) : null}
 
           {error ? (
             <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">

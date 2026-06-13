@@ -1,16 +1,21 @@
 export const AUTH_TOKEN_KEY = "kab_auth_token";
 export const AUTH_USER_KEY = "kab_auth_user";
+export const AUTH_CHANGE_EVENT = "kab-auth-change";
+
+function notifySessionChange() {
+  window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
+}
 
 export function saveSession({ token, user }) {
   window.localStorage.setItem(AUTH_TOKEN_KEY, token);
   window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user || {}));
-  window.dispatchEvent(new Event("kab-auth-change"));
+  notifySessionChange();
 }
 
 export function clearSession() {
   window.localStorage.removeItem(AUTH_TOKEN_KEY);
   window.localStorage.removeItem(AUTH_USER_KEY);
-  window.dispatchEvent(new Event("kab-auth-change"));
+  notifySessionChange();
 }
 
 export function getStoredUser() {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -160,6 +161,8 @@ function LoadingState() {
 }
 
 export default function StrategicAIPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [period, setPeriod] = useState("this_month");
   const [activeTab, setActiveTab] = useState("overview");
   const [analysis, setAnalysis] = useState(null);
@@ -178,6 +181,18 @@ export default function StrategicAIPage() {
       });
       setAnalysis(response.data.data || null);
     } catch (requestError) {
+      if (requestError?.response?.status === 401) {
+        navigate("/login", {
+          replace: true,
+          state: {
+            from: `${location.pathname}${location.search}`,
+            message:
+              "Votre session est absente ou expiree. Connectez-vous pour acceder a l'Assistant strategique IA."
+          }
+        });
+        return;
+      }
+
       setError(
         requestError?.response?.data?.message ||
           "Le moteur analytique est indisponible. Verifiez que le backend est demarre."
@@ -210,6 +225,18 @@ export default function StrategicAIPage() {
       setAnswer(payload.answer || payload.summary || "");
       setActiveTab("overview");
     } catch (requestError) {
+      if (requestError?.response?.status === 401) {
+        navigate("/login", {
+          replace: true,
+          state: {
+            from: `${location.pathname}${location.search}`,
+            message:
+              "Votre session est absente ou expiree. Connectez-vous pour acceder a l'Assistant strategique IA."
+          }
+        });
+        return;
+      }
+
       setError(
         requestError?.response?.data?.message ||
           "L'assistant ne peut pas repondre pour le moment."
