@@ -41,7 +41,7 @@ export function LineChart({ data = [], series = [], xKey = "period" }) {
           <span key={item.key} className="flex items-center gap-2">
             <span
               className="h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: SERIES_COLORS[index] }}
+              style={{ backgroundColor: item.color || SERIES_COLORS[index] }}
             />
             {item.label}
           </span>
@@ -72,7 +72,7 @@ export function LineChart({ data = [], series = [], xKey = "period" }) {
             <polyline
               key={item.key}
               fill="none"
-              stroke={SERIES_COLORS[index]}
+              stroke={item.color || SERIES_COLORS[index]}
               strokeWidth="4"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -100,7 +100,7 @@ export function LineChart({ data = [], series = [], xKey = "period" }) {
                 textAnchor="middle"
                 className="fill-slate-500 text-[11px]"
               >
-                {String(row[xKey] || "").slice(-7)}
+                {String(row[xKey] || "")}
               </text>
             );
           })}

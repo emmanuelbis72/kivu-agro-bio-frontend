@@ -3,6 +3,10 @@ import { Link } from "react-router-dom";
 import api from "../api/axios";
 import SectionTitle from "../components/ui/SectionTitle";
 import TableCard from "../components/ui/TableCard";
+import {
+  HorizontalBarChart,
+  LineChart
+} from "../components/analytics/AnalyticsCharts";
 
 const initialForm = {
   expense_date: new Date().toISOString().split("T")[0],
@@ -36,6 +40,21 @@ const paymentMethods = [
   { value: "card", label: "Carte" }
 ];
 
+const monthLabels = [
+  "Jan",
+  "Fev",
+  "Mar",
+  "Avr",
+  "Mai",
+  "Juin",
+  "Juil",
+  "Aout",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec"
+];
+
 function formatMoney(value) {
   return new Intl.NumberFormat("fr-FR", {
     style: "currency",
@@ -51,6 +70,30 @@ function formatCategoryLabel(value) {
 function formatPaymentMethodLabel(value) {
   const found = paymentMethods.find((item) => item.value === value);
   return found ? found.label : value;
+}
+
+function getExpenseDateParts(value) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Cairo",
+    year: "numeric",
+    month: "2-digit"
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+
+  return year && month
+    ? { year, month: Number(month) }
+    : null;
 }
 
 function getAccountingBadge(row) {
@@ -89,6 +132,9 @@ export default function ExpensesPage() {
   const [loading, setLoading] = useState(true);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [analysisYear, setAnalysisYear] = useState(
+    String(new Date().getFullYear())
+  );
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [editingExpenseId, setEditingExpenseId] = useState(null);
@@ -350,6 +396,102 @@ export default function ExpensesPage() {
     [suppliers]
   );
 
+  const expenseYears = useMemo(() => {
+    const years = [
+      ...new Set(
+        expenses
+          .map((expense) => getExpenseDateParts(expense.expense_date)?.year)
+          .filter((year) => /^\d{4}$/.test(year))
+      )
+    ].sort((left, right) => Number(right) - Number(left));
+
+    return years.length > 0 ? years : [String(new Date().getFullYear())];
+  }, [expenses]);
+
+  const yearlyExpenses = useMemo(
+    () =>
+      expenses.filter(
+        (expense) => {
+          const dateParts = getExpenseDateParts(expense.expense_date);
+          return dateParts?.year === String(analysisYear);
+        }
+      ),
+    [analysisYear, expenses]
+  );
+
+  const yearlyCategories = useMemo(
+    () =>
+      categoryOptions.filter((category) =>
+        yearlyExpenses.some((expense) => expense.category === category.value)
+      ),
+    [yearlyExpenses]
+  );
+
+  const monthlyExpenseRows = useMemo(
+    () =>
+      monthLabels.map((monthLabel, monthIndex) => {
+        const monthExpenses = yearlyExpenses.filter(
+          (expense) => {
+            const dateParts = getExpenseDateParts(expense.expense_date);
+            return dateParts?.month === monthIndex + 1;
+          }
+        );
+        const row = {
+          month_number: monthIndex + 1,
+          period: `${monthLabel} ${analysisYear}`,
+          total_amount: monthExpenses.reduce(
+            (sum, expense) => sum + Number(expense.amount || 0),
+            0
+          )
+        };
+
+        yearlyCategories.forEach((category) => {
+          row[category.value] = monthExpenses
+            .filter((expense) => expense.category === category.value)
+            .reduce(
+              (sum, expense) => sum + Number(expense.amount || 0),
+              0
+            );
+        });
+
+        return row;
+      }),
+    [analysisYear, yearlyCategories, yearlyExpenses]
+  );
+
+  const yearlyCategoryRows = useMemo(
+    () =>
+      yearlyCategories
+        .map((category) => ({
+          category: category.label,
+          total_amount: yearlyExpenses
+            .filter((expense) => expense.category === category.value)
+            .reduce(
+              (sum, expense) => sum + Number(expense.amount || 0),
+              0
+            )
+        }))
+        .sort(
+          (left, right) =>
+            Number(right.total_amount) - Number(left.total_amount)
+        ),
+    [yearlyCategories, yearlyExpenses]
+  );
+
+  const yearlyTotal = useMemo(
+    () =>
+      yearlyExpenses.reduce(
+        (sum, expense) => sum + Number(expense.amount || 0),
+        0
+      ),
+    [yearlyExpenses]
+  );
+
+  const activeMonthsCount = monthlyExpenseRows.filter(
+    (row) => Number(row.total_amount) > 0
+  ).length;
+  const topYearlyCategory = yearlyCategoryRows[0] || null;
+
   return (
     <div className="space-y-8">
       <SectionTitle
@@ -390,6 +532,121 @@ export default function ExpensesPage() {
             {formatMoney(totals.totalFiltered)}
           </div>
         </div>
+      </div>
+
+      <div className="space-y-6 rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="text-xl font-bold text-slate-950">
+              Analyse mensuelle des depenses
+            </div>
+            <div className="mt-1 text-sm text-slate-500">
+              Montants depenses chaque mois et repartition par categorie.
+            </div>
+          </div>
+
+          <label className="text-sm font-semibold text-slate-700">
+            Annee
+            <select
+              value={analysisYear}
+              onChange={(event) => setAnalysisYear(event.target.value)}
+              className="ml-3 rounded-2xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500"
+            >
+              {expenseYears.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Total {analysisYear}
+            </div>
+            <div className="mt-2 text-2xl font-black text-slate-950">
+              {formatMoney(yearlyTotal)}
+            </div>
+          </div>
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Moyenne par mois actif
+            </div>
+            <div className="mt-2 text-2xl font-black text-slate-950">
+              {formatMoney(
+                activeMonthsCount > 0 ? yearlyTotal / activeMonthsCount : 0
+              )}
+            </div>
+          </div>
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Premiere categorie
+            </div>
+            <div className="mt-2 text-lg font-black text-slate-950">
+              {topYearlyCategory?.category || "-"}
+            </div>
+            <div className="mt-1 text-sm font-semibold text-slate-600">
+              {formatMoney(topYearlyCategory?.total_amount || 0)}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <div className="rounded-2xl border border-slate-100 p-5 xl:col-span-2">
+            <div className="mb-4 text-base font-bold text-slate-900">
+              Evolution des depenses par mois
+            </div>
+            <LineChart
+              data={monthlyExpenseRows}
+              xKey="period"
+              series={[
+                {
+                  key: "total_amount",
+                  label: "Depenses mensuelles",
+                  color: "#dc2626"
+                }
+              ]}
+            />
+          </div>
+
+          <div className="rounded-2xl border border-slate-100 p-5">
+            <div className="mb-4 text-base font-bold text-slate-900">
+              Depenses par categorie
+            </div>
+            <HorizontalBarChart
+              data={yearlyCategoryRows}
+              labelKey="category"
+              valueKey="total_amount"
+              color="bg-red-500"
+            />
+          </div>
+        </div>
+
+        <TableCard
+          title={`Detail mensuel par categorie - ${analysisYear}`}
+          rows={monthlyExpenseRows}
+          emptyText="Aucune depense pour cette annee"
+          getRowKey={(row) => row.month_number}
+          columns={[
+            { key: "period", label: "Mois" },
+            ...yearlyCategories.map((category) => ({
+              key: category.value,
+              label: category.label,
+              render: (row) => formatMoney(row[category.value] || 0)
+            })),
+            {
+              key: "total_amount",
+              label: "Total du mois",
+              render: (row) => (
+                <span className="font-bold text-slate-950">
+                  {formatMoney(row.total_amount)}
+                </span>
+              )
+            }
+          ]}
+        />
       </div>
 
       <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
