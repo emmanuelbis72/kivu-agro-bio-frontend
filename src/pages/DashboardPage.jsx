@@ -11,6 +11,7 @@ import {
   buildCommercialHeatmapQueryParams,
   getDefaultCommercialHeatmapFilters
 } from "../utils/commercialHeatmap";
+import { saveBlobResponse } from "../utils/fileDownload";
 
 function formatMoney(value) {
   return new Intl.NumberFormat("fr-FR", {
@@ -204,13 +205,40 @@ function getDefaultCollectionFilters() {
   return {
     start_date: formatDateInput(startDate),
     end_date: formatDateInput(endDate),
+    as_of_date: formatDateInput(endDate),
     warehouse_id: "",
     customer_id: "",
     customer_city: "",
     entry_type: "all",
+    payment_status: "all",
+    alert_level: "all",
     top_products: "8",
     top_cities: "8"
   };
+}
+
+function getCollectionAlertClass(level) {
+  return (
+    {
+      green: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200",
+      light_green: "bg-lime-50 text-lime-800 ring-1 ring-lime-200",
+      orange: "bg-orange-50 text-orange-800 ring-1 ring-orange-200",
+      red: "bg-red-50 text-red-800 ring-1 ring-red-200",
+      paid: "bg-blue-50 text-blue-800 ring-1 ring-blue-200"
+    }[level] || "bg-slate-50 text-slate-700 ring-1 ring-slate-200"
+  );
+}
+
+function getCollectionRowClass(row) {
+  return (
+    {
+      green: "bg-emerald-50/50",
+      light_green: "bg-lime-50/60",
+      orange: "bg-orange-50/70",
+      red: "bg-red-50/70",
+      paid: "bg-blue-50/40"
+    }[row.alert_level] || ""
+  );
 }
 
 function getDefaultCustomerBalanceFilters() {
@@ -1737,6 +1765,7 @@ export default function DashboardPage() {
   const [reportLoading, setReportLoading] = useState(false);
   const [directionLoading, setDirectionLoading] = useState(false);
   const [collectionLoading, setCollectionLoading] = useState(false);
+  const [collectionExporting, setCollectionExporting] = useState(false);
   const [customerBalanceLoading, setCustomerBalanceLoading] = useState(false);
   const [commercialRefreshing, setCommercialRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -2066,6 +2095,39 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleExportCollectionsPdf() {
+    try {
+      setCollectionExporting(true);
+      setError("");
+      const params = new URLSearchParams();
+
+      Object.entries(collectionFilters).forEach(([key, value]) => {
+        if (
+          !["entry_type", "top_products", "top_cities"].includes(key) &&
+          value !== undefined &&
+          value !== null &&
+          value !== ""
+        ) {
+          params.set(key, value);
+        }
+      });
+
+      const response = await api.get(
+        `/reports/collections/export/pdf?${params.toString()}`,
+        { responseType: "blob" }
+      );
+      saveBlobResponse(response, "etat-recouvrement.pdf");
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de generer l'etat PDF de recouvrement."
+      );
+    } finally {
+      setCollectionExporting(false);
+    }
+  }
+
   async function handleApplyDirectionFilters(event) {
     event.preventDefault();
 
@@ -2152,8 +2214,11 @@ export default function DashboardPage() {
   };
   const collectionOverview = collectionData || {};
   const collectionSummary = collectionOverview.summary || {};
-  const collectionIssuedInvoices = collectionOverview.issued_invoices || [];
-  const collectionUnpaidInvoices = collectionOverview.unpaid_invoices || [];
+  const collectionOpenInvoices =
+    collectionOverview.open_invoices ||
+    collectionOverview.unpaid_invoices ||
+    [];
+  const collectionPaidInvoices = collectionOverview.paid_invoices || [];
   const collectionPayments = collectionOverview.payments || [];
   const collectionHeatmap = collectionOverview.product_city_heatmap || {
     products: [],
@@ -2570,12 +2635,19 @@ export default function DashboardPage() {
   const collectionChartActions = useMemo(
     () => ({
       unpaidInvoices: {
-        to: buildCollectionsReportPath("customer_aging"),
-        label: "Voir creances"
+        to: buildCollectionsReportPath("collections", {
+          as_of_date: collectionFilters.as_of_date,
+          payment_status: "open",
+          alert_level: collectionFilters.alert_level || undefined
+        }),
+        label: "Voir l'etat"
       },
-      issuedInvoices: {
-        to: buildCollectionsReportPath("sales_detail"),
-        label: "Voir factures"
+      paidInvoices: {
+        to: buildCollectionsReportPath("collections", {
+          as_of_date: collectionFilters.as_of_date,
+          payment_status: "paid"
+        }),
+        label: "Voir les payees"
       },
       payments: {
         to: buildCollectionsReportPath("receipts_journal"),
@@ -3203,11 +3275,23 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {collectionLoading ? (
-                <div className="text-sm font-medium text-brand-600">
-                  Chargement du suivi...
-                </div>
-              ) : null}
+              <div className="flex flex-wrap items-center gap-3">
+                {collectionLoading ? (
+                  <div className="text-sm font-medium text-brand-600">
+                    Chargement du suivi...
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={handleExportCollectionsPdf}
+                  disabled={collectionExporting || collectionLoading}
+                  className="rounded-2xl border border-brand-300 px-4 py-2.5 text-sm font-semibold text-brand-700 disabled:opacity-60"
+                >
+                  {collectionExporting
+                    ? "Generation PDF..."
+                    : "Exporter l'etat PDF"}
+                </button>
+              </div>
             </div>
 
             <form
@@ -3229,6 +3313,16 @@ export default function DashboardPage() {
                   type="date"
                   name="end_date"
                   value={collectionFilters.end_date}
+                  onChange={handleCollectionFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </FilterField>
+
+              <FilterField label="Date de reference alertes">
+                <input
+                  type="date"
+                  name="as_of_date"
+                  value={collectionFilters.as_of_date}
                   onChange={handleCollectionFilterChange}
                   className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                 />
@@ -3295,6 +3389,36 @@ export default function DashboardPage() {
                 </select>
               </FilterField>
 
+              <FilterField label="Statut de paiement">
+                <select
+                  name="payment_status"
+                  value={collectionFilters.payment_status}
+                  onChange={handleCollectionFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="all">Tous les statuts</option>
+                  <option value="open">Toutes les factures ouvertes</option>
+                  <option value="unpaid">Non payees</option>
+                  <option value="partial">Partiellement payees</option>
+                  <option value="paid">Payees</option>
+                </select>
+              </FilterField>
+
+              <FilterField label="Niveau d'alerte">
+                <select
+                  name="alert_level"
+                  value={collectionFilters.alert_level}
+                  onChange={handleCollectionFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="all">Toutes les alertes</option>
+                  <option value="green">Vert - 0 a 21 jours</option>
+                  <option value="light_green">Vert clair - 22 a 29 jours</option>
+                  <option value="orange">Orange - 30 a 44 jours</option>
+                  <option value="red">Rouge - 45 jours et plus</option>
+                </select>
+              </FilterField>
+
               <FilterField label="Top produits heatmap">
                 <select
                   name="top_products"
@@ -3337,33 +3461,84 @@ export default function DashboardPage() {
             </form>
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
             <StatCard
-              title="Total factures emises"
+              title="Montant facture"
               value={formatMoney(collectionSummary.total_invoiced_amount)}
               subtitle={`${formatNumber(collectionSummary.total_invoices)} facture(s)`}
             />
             <StatCard
-              title="Total paiements recus"
-              value={formatMoney(collectionSummary.total_payments_amount)}
-              subtitle={`${formatNumber(collectionSummary.total_payments)} paiement(s)`}
+              title="Montant paye sur factures"
+              value={formatMoney(collectionSummary.total_invoice_paid_amount)}
+              subtitle={`${formatNumber(
+                collectionSummary.paid_invoices_count
+              )} facture(s) soldee(s)`}
             />
             <StatCard
-              title="Ecart facture / encaisse"
-              value={formatMoney(collectionSummary.invoiced_payment_gap)}
-              subtitle={`Taux d encaissement ${formatPercent(
+              title="Solde a recouvrer"
+              value={formatMoney(collectionSummary.total_invoice_balance_due)}
+              subtitle={`Taux d'encaissement ${formatPercent(
                 collectionSummary.collection_rate_percent
               )}`}
             />
             <StatCard
-              title="Solde a recouvrer"
-              value={formatMoney(collectionSummary.total_unpaid_amount)}
+              title="Non payees"
+              value={formatMoney(collectionSummary.unpaid_balance_amount)}
               subtitle={`${formatNumber(
-                collectionSummary.total_unpaid_invoices
-              )} facture(s), dont ${formatNumber(
-                collectionSummary.overdue_invoices_count
-              )} echue(s)`}
+                collectionSummary.unpaid_invoices_count
+              )} facture(s) sans paiement`}
             />
+            <StatCard
+              title="Paiements partiels"
+              value={formatMoney(collectionSummary.partial_balance_amount)}
+              subtitle={`${formatNumber(
+                collectionSummary.partial_invoices_count
+              )} facture(s) partielle(s)`}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              {
+                level: "green",
+                title: "Vert - 0 a 21 jours",
+                count: collectionSummary.green_invoices_count,
+                amount: collectionSummary.green_balance_amount
+              },
+              {
+                level: "light_green",
+                title: "Vert clair - 22 a 29 jours",
+                count: collectionSummary.light_green_invoices_count,
+                amount: collectionSummary.light_green_balance_amount
+              },
+              {
+                level: "orange",
+                title: "Orange - 30 a 44 jours",
+                count: collectionSummary.orange_invoices_count,
+                amount: collectionSummary.orange_balance_amount
+              },
+              {
+                level: "red",
+                title: "Rouge - 45 jours et plus",
+                count: collectionSummary.red_invoices_count,
+                amount: collectionSummary.red_balance_amount
+              }
+            ].map((item) => (
+              <div
+                key={item.level}
+                className={`rounded-3xl p-5 ${getCollectionAlertClass(
+                  item.level
+                )}`}
+              >
+                <div className="text-sm font-bold">{item.title}</div>
+                <div className="mt-3 text-2xl font-black">
+                  {formatMoney(item.amount)}
+                </div>
+                <div className="mt-1 text-xs font-semibold">
+                  {formatNumber(item.count)} facture(s) ouverte(s)
+                </div>
+              </div>
+            ))}
           </div>
 
           <div
@@ -3376,19 +3551,21 @@ export default function DashboardPage() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="text-lg font-semibold text-slate-900">
-                    Factures emises
+                    Factures payees
                   </div>
                   <div className="mt-1 text-sm text-slate-500">
-                    Toutes les factures emises sur la periode filtree.
+                    Factures integralement soldees sur le filtre actif.
                   </div>
                 </div>
-                <CardActionLink action={collectionChartActions.issuedInvoices} />
+                <CardActionLink action={collectionChartActions.paidInvoices} />
               </div>
 
               <TableCard
                 title=""
-                rows={collectionIssuedInvoices}
-                emptyText="Aucune facture emise sur ce filtre"
+                rows={collectionPaidInvoices}
+                emptyText="Aucune facture payee sur ce filtre"
+                getRowKey={(row) => row.invoice_id}
+                rowClassName={getCollectionRowClass}
                 columns={[
                   { key: "invoice_number", label: "Facture" },
                   {
@@ -3396,26 +3573,8 @@ export default function DashboardPage() {
                     label: "Date",
                     render: (row) => formatDate(row.invoice_date)
                   },
-                  {
-                    key: "due_date",
-                    label: "Echeance",
-                    render: (row) => formatDate(row.due_date)
-                  },
                   { key: "customer_name", label: "Client" },
-                  { key: "customer_city", label: "Ville" },
-                  {
-                    key: "status",
-                    label: "Statut",
-                    render: (row) => (
-                      <span
-                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getInvoiceStatusClass(
-                          row.status
-                        )}`}
-                      >
-                        {row.status || "-"}
-                      </span>
-                    )
-                  },
+                  { key: "commercial_name", label: "Commercial" },
                   {
                     key: "total_amount",
                     label: "Montant",
@@ -3425,11 +3584,6 @@ export default function DashboardPage() {
                     key: "paid_amount",
                     label: "Paye",
                     render: (row) => formatMoney(row.paid_amount)
-                  },
-                  {
-                    key: "balance_due",
-                    label: "Solde",
-                    render: (row) => formatMoney(row.balance_due)
                   }
                 ]}
               />
@@ -3492,10 +3646,10 @@ export default function DashboardPage() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-lg font-semibold text-slate-900">
-                  Factures non encore payees
+                  Factures a recouvrer
                 </div>
                 <div className="mt-1 text-sm text-slate-500">
-                  Creances encore ouvertes, independamment du type de resultat affiche.
+                  Factures non payees ou partiellement payees, classees par anciennete.
                 </div>
               </div>
               <CardActionLink action={collectionChartActions.unpaidInvoices} />
@@ -3503,34 +3657,66 @@ export default function DashboardPage() {
 
             <TableCard
               title=""
-              rows={collectionUnpaidInvoices}
-              emptyText="Aucune facture impayee sur ce filtre"
+              rows={collectionOpenInvoices}
+              emptyText="Aucune facture ouverte sur ce filtre"
+              getRowKey={(row) => row.invoice_id}
+              rowClassName={getCollectionRowClass}
               columns={[
+                {
+                  key: "alert_level",
+                  label: "Alerte",
+                  render: (row) => (
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${getCollectionAlertClass(
+                        row.alert_level
+                      )}`}
+                    >
+                      {row.alert_label}
+                    </span>
+                  )
+                },
+                {
+                  key: "collection_age_days",
+                  label: "Age",
+                  render: (row) =>
+                    `${Number(row.collection_age_days || 0)} j`
+                },
                 { key: "invoice_number", label: "Facture" },
                 {
                   key: "invoice_date",
-                  label: "Date",
+                  label: "Emission",
                   render: (row) => formatDate(row.invoice_date)
                 },
-                {
-                  key: "due_date",
-                  label: "Echeance",
-                  render: (row) => formatDate(row.due_date)
-                },
                 { key: "customer_name", label: "Client" },
-                { key: "customer_city", label: "Ville" },
+                { key: "customer_phone", label: "Telephone" },
+                { key: "commercial_name", label: "Commercial" },
+                {
+                  key: "payment_status",
+                  label: "Paiement",
+                  render: (row) => (
+                    <span className="font-semibold text-slate-900">
+                      {row.payment_status_label}
+                    </span>
+                  )
+                },
+                {
+                  key: "total_amount",
+                  label: "Montant",
+                  render: (row) => formatMoney(row.total_amount)
+                },
+                {
+                  key: "paid_amount",
+                  label: "Paye",
+                  render: (row) => formatMoney(row.paid_amount)
+                },
                 {
                   key: "balance_due",
                   label: "Solde",
-                  render: (row) => formatMoney(row.balance_due)
-                },
-                {
-                  key: "days_overdue",
-                  label: "Retard",
-                  render: (row) =>
-                    row.days_overdue === null
-                      ? "-"
-                      : `${Number(row.days_overdue || 0)} j`
+                  render: (row) => (
+                    <span className="font-bold text-slate-950">
+                      {formatMoney(row.balance_due)}
+                    </span>
+                  )
                 }
               ]}
             />

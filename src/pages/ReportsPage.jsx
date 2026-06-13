@@ -46,6 +46,18 @@ function formatBoolean(value) {
   return value ? "Oui" : "Non";
 }
 
+function getCollectionAlertClass(level) {
+  return (
+    {
+      green: "bg-emerald-50 text-emerald-800",
+      light_green: "bg-lime-50 text-lime-800",
+      orange: "bg-orange-50 text-orange-800",
+      red: "bg-red-50 text-red-800",
+      paid: "bg-blue-50 text-blue-800"
+    }[level] || "bg-slate-50 text-slate-700"
+  );
+}
+
 function formatAccountType(value) {
   return (
     {
@@ -81,6 +93,9 @@ function getInitialFilters() {
     product_ids: [],
     invoice_number: "",
     invoice_status: "",
+    payment_status: "all",
+    alert_level: "all",
+    customer_city: "",
     low_stock_only: false,
     detail_limit: 20
   };
@@ -107,6 +122,103 @@ function triggerCsvDownload(filename, content) {
 }
 
 const reportConfigs = {
+  collections: {
+    exportKey: "collections",
+    label: "Etat de recouvrement",
+    description:
+      "Factures payees, partielles et non payees, classees par age et couleur d'alerte pour les commerciaux.",
+    endpoint: "/reports/collections",
+    buildParams: (filters, forExport = false) => ({
+      start_date: filters.start_date || undefined,
+      end_date: filters.end_date || undefined,
+      as_of_date: filters.as_of_date,
+      warehouse_id: filters.warehouse_id || undefined,
+      customer_id: filters.customer_id || undefined,
+      customer_city: filters.customer_city || undefined,
+      payment_status: filters.payment_status || "all",
+      alert_level: filters.alert_level || "all",
+      limit: forExport ? 5000 : 500
+    }),
+    exportFilename: (filters) =>
+      `etat-recouvrement-${filters.as_of_date || "export"}.csv`,
+    summaryCards: (summary) => [
+      {
+        title: "Montant facture",
+        value: formatMoney(summary.total_invoiced_amount)
+      },
+      {
+        title: "Montant paye",
+        value: formatMoney(summary.total_paid_amount)
+      },
+      {
+        title: "Solde a recouvrer",
+        value: formatMoney(summary.total_balance_due)
+      },
+      {
+        title: "Orange / Rouge",
+        value: formatMoney(
+          Number(summary.orange_balance_amount || 0) +
+            Number(summary.red_balance_amount || 0)
+        )
+      }
+    ],
+    columns: [
+      {
+        key: "alert_label",
+        label: "Alerte",
+        render: (row) => (
+          <span
+            className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${getCollectionAlertClass(
+              row.alert_level
+            )}`}
+          >
+            {row.alert_label}
+          </span>
+        ),
+        csvValue: (row) => row.alert_label
+      },
+      {
+        key: "collection_age_days",
+        label: "Age",
+        render: (row) => `${Number(row.collection_age_days || 0)} j`,
+        csvValue: (row) => row.collection_age_days
+      },
+      { key: "invoice_number", label: "Facture", csvValue: (row) => row.invoice_number },
+      {
+        key: "invoice_date",
+        label: "Emission",
+        render: (row) => formatDate(row.invoice_date),
+        csvValue: (row) => formatDate(row.invoice_date)
+      },
+      { key: "customer_name", label: "Client", csvValue: (row) => row.customer_name },
+      { key: "customer_phone", label: "Telephone", csvValue: (row) => row.customer_phone },
+      { key: "commercial_name", label: "Commercial", csvValue: (row) => row.commercial_name },
+      {
+        key: "payment_status_label",
+        label: "Paiement",
+        csvValue: (row) => row.payment_status_label
+      },
+      {
+        key: "total_amount",
+        label: "Montant",
+        render: (row) => formatMoney(row.total_amount),
+        csvValue: (row) => row.total_amount
+      },
+      {
+        key: "paid_amount",
+        label: "Paye",
+        render: (row) => formatMoney(row.paid_amount),
+        csvValue: (row) => row.paid_amount
+      },
+      {
+        key: "balance_due",
+        label: "Solde",
+        render: (row) => formatMoney(row.balance_due),
+        csvValue: (row) => row.balance_due
+      }
+    ],
+    emptyText: "Aucune facture sur ce filtre de recouvrement"
+  },
   customer_aging: {
     exportKey: "customer-aging",
     label: "Balance agee clients",
@@ -1811,6 +1923,7 @@ const reportSections = [
   {
     title: "Recouvrement",
     keys: [
+      "collections",
       "receipts_journal",
       "customer_aging",
       "supplier_aging",
@@ -1854,6 +1967,9 @@ function buildFiltersFromSearchParams(searchParams) {
     "product_id",
     "invoice_number",
     "invoice_status",
+    "payment_status",
+    "alert_level",
+    "customer_city",
     "detail_limit"
   ];
 
@@ -2287,6 +2403,117 @@ export default function ReportsPage() {
         <div className="mb-5 text-lg font-semibold text-slate-900">Filtres</div>
 
         <form onSubmit={handleApplyFilters} className="space-y-5">
+          {activeReport === "collections" ? (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date debut emission
+                </label>
+                <input
+                  type="date"
+                  name="start_date"
+                  value={filters.start_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date fin emission
+                </label>
+                <input
+                  type="date"
+                  name="end_date"
+                  value={filters.end_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date de reference alertes
+                </label>
+                <input
+                  type="date"
+                  name="as_of_date"
+                  value={filters.as_of_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Depot
+                </label>
+                <select
+                  name="warehouse_id"
+                  value={filters.warehouse_id}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les depots</option>
+                  {sortedWarehouses.map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name} - {warehouse.city}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Client
+                </label>
+                <select
+                  name="customer_id"
+                  value={filters.customer_id}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les clients</option>
+                  {sortedCustomers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.business_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Statut de paiement
+                </label>
+                <select
+                  name="payment_status"
+                  value={filters.payment_status}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="all">Tous les statuts</option>
+                  <option value="open">Toutes les ouvertes</option>
+                  <option value="unpaid">Non payees</option>
+                  <option value="partial">Partiellement payees</option>
+                  <option value="paid">Payees</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Niveau d'alerte
+                </label>
+                <select
+                  name="alert_level"
+                  value={filters.alert_level}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="all">Toutes les alertes</option>
+                  <option value="green">Vert - 0 a 21 jours</option>
+                  <option value="light_green">Vert clair - 22 a 29 jours</option>
+                  <option value="orange">Orange - 30 a 44 jours</option>
+                  <option value="red">Rouge - 45 jours et plus</option>
+                </select>
+              </div>
+            </div>
+          ) : null}
+
           {activeReport === "customer_aging" || activeReport === "supplier_aging" ? (
             <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
               <div>
@@ -2964,6 +3191,23 @@ export default function ReportsPage() {
             rows={data?.rows || []}
             columns={activeConfig.columns}
             emptyText={activeConfig.emptyText}
+            getRowKey={
+              activeReport === "collections"
+                ? (row) => row.invoice_id
+                : undefined
+            }
+            rowClassName={
+              activeReport === "collections"
+                ? (row) =>
+                    ({
+                      green: "bg-emerald-50/50",
+                      light_green: "bg-lime-50/60",
+                      orange: "bg-orange-50/70",
+                      red: "bg-red-50/70",
+                      paid: "bg-blue-50/40"
+                    })[row.alert_level] || ""
+                : undefined
+            }
           />
         )}
 

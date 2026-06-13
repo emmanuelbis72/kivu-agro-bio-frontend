@@ -1,6 +1,13 @@
-export default function TableCard({ title, columns = [], rows = [], emptyText = "Aucune donnée" }) {
+export default function TableCard({
+  title,
+  columns = [],
+  rows = [],
+  emptyText = "Aucune donnee",
+  rowClassName,
+  getRowKey
+}) {
   return (
-    <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
+    <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
       {title ? (
         <div className="mb-4 text-lg font-semibold text-slate-900">{title}</div>
       ) : null}
@@ -14,22 +21,27 @@ export default function TableCard({ title, columns = [], rows = [], emptyText = 
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200">
-                {columns.map((col) => (
+                {columns.map((column) => (
                   <th
-                    key={col.key}
+                    key={column.key}
                     className="px-3 py-3 text-left font-semibold text-slate-600"
                   >
-                    {col.label}
+                    {column.label}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {rows.map((row, index) => (
-                <tr key={index} className="border-b border-slate-100">
-                  {columns.map((col) => (
-                    <td key={col.key} className="px-3 py-3 text-slate-700">
-                      {col.render ? col.render(row) : row[col.key]}
+                <tr
+                  key={getRowKey ? getRowKey(row, index) : index}
+                  className={`border-b border-slate-100 ${
+                    rowClassName ? rowClassName(row, index) : ""
+                  }`}
+                >
+                  {columns.map((column) => (
+                    <td key={column.key} className="px-3 py-3 text-slate-700">
+                      {column.render ? column.render(row) : row[column.key]}
                     </td>
                   ))}
                 </tr>
