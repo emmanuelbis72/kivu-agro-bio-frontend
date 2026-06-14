@@ -6,6 +6,26 @@ export default function TableCard({
   rowClassName,
   getRowKey
 }) {
+  function renderCellValue(value) {
+    if (value === null || value === undefined || value === "") {
+      return "-";
+    }
+
+    if (Array.isArray(value)) {
+      return value
+        .map((item) =>
+          item && typeof item === "object" ? JSON.stringify(item) : String(item)
+        )
+        .join(", ");
+    }
+
+    if (typeof value === "object") {
+      return JSON.stringify(value);
+    }
+
+    return value;
+  }
+
   return (
     <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
       {title ? (
@@ -41,7 +61,9 @@ export default function TableCard({
                 >
                   {columns.map((column) => (
                     <td key={column.key} className="px-3 py-3 text-slate-700">
-                      {column.render ? column.render(row) : row[column.key]}
+                      {column.render
+                        ? column.render(row)
+                        : renderCellValue(row[column.key])}
                     </td>
                   ))}
                 </tr>

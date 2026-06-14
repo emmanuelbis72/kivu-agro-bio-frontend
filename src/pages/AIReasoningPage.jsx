@@ -15,7 +15,61 @@ function formatMetricValue(value) {
     }).format(value);
   }
 
+  if (Array.isArray(value)) {
+    return value.map((item) => formatMetricValue(item)).join(", ");
+  }
+
+  if (value && typeof value === "object") {
+    return Object.entries(value)
+      .map(([key, item]) => `${humanizeMetricKey(key)}: ${formatMetricValue(item)}`)
+      .join(" | ");
+  }
+
   return String(value ?? "-");
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+
+  const date = new Date(`${value}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+
+  return new Intl.DateTimeFormat("fr-FR").format(date);
+}
+
+function formatPeriod(period) {
+  if (!period) return "-";
+  if (typeof period === "string") return period.replaceAll("_", " ");
+
+  if (typeof period === "object") {
+    const startDate = period.start_date;
+    const endDate = period.end_date;
+
+    if (startDate && endDate) {
+      return `${formatDate(startDate)} au ${formatDate(endDate)}`;
+    }
+
+    return String(period.label || period.key || "-").replaceAll("_", " ");
+  }
+
+  return String(period);
+}
+
+function formatRecommendation(item) {
+  if (!item) return "-";
+  if (typeof item === "string") return item;
+
+  return [
+    item.title,
+    item.action || item.recommendation,
+    item.owner_role ? `Responsable : ${item.owner_role}` : "",
+    item.deadline ? `Échéance : ${formatDate(item.deadline)}` : ""
+  ]
+    .filter(Boolean)
+    .join(" — ");
 }
 
 function formatMoney(value) {
@@ -180,6 +234,10 @@ function normalizeCEOBriefPayload(payload) {
       : Array.isArray(ai?.recommendations)
       ? ai.recommendations
       : [],
+    action_plan: Array.isArray(ai?.action_plan) ? ai.action_plan : [],
+    decisions_required: Array.isArray(ai?.decisions_required)
+      ? ai.decisions_required
+      : [],
     rawData
   };
 }
@@ -209,7 +267,9 @@ function buildKnowledgePayload(result, question) {
     `Résumé exécutif :\n${result?.summary || "-"}`,
     `\nAnalyse détaillée :\n${result?.answer || "-"}`,
     result?.recommendations?.length
-      ? `\nRecommandations :\n- ${result.recommendations.join("\n- ")}`
+      ? `\nRecommandations :\n- ${result.recommendations
+          .map(formatRecommendation)
+          .join("\n- ")}`
       : "",
     result?.drivers?.length
       ? `\nFacteurs / signaux :\n- ${result.drivers.join("\n- ")}`
@@ -450,6 +510,24 @@ export default function AIReasoningPage() {
 
   const { risks, opportunities, neutral } = useMemo(
     () => extractRiskAndOpportunityRows(result?.drivers || []),
+    [result]
+  );
+  const actionPlanRows = useMemo(
+    () =>
+      (Array.isArray(result?.action_plan) ? result.action_plan : []).map(
+        (item, index) => ({
+          ...item,
+          id: item.id || `action-${index + 1}`
+        })
+      ),
+    [result]
+  );
+  const recommendationRows = useMemo(
+    () =>
+      (Array.isArray(result?.recommendations)
+        ? result.recommendations
+        : []
+      ).map((item) => ({ item: formatRecommendation(item) })),
     [result]
   );
 
@@ -735,7 +813,7 @@ export default function AIReasoningPage() {
             <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
               <div className="text-sm text-slate-500">Période</div>
               <div className="mt-2 text-lg font-bold text-slate-900">
-                {result.period || "-"}
+                {formatPeriod(result.period)}
               </div>
             </div>
 
@@ -791,6 +869,42 @@ export default function AIReasoningPage() {
             />
           ) : null}
 
+          {actionPlanRows.length > 0 ? (
+            <TableCard
+              title={`Plan d'action concret (${actionPlanRows.length})`}
+              rows={actionPlanRows}
+              getRowKey={(row) => row.id}
+              emptyText="Aucune action prioritaire"
+              columns={[
+                { key: "title", label: "Action" },
+                {
+                  key: "priority",
+                  label: "Priorité",
+                  render: (row) => String(row.priority || "-").toUpperCase()
+                },
+                { key: "owner_role", label: "Responsable" },
+                {
+                  key: "deadline",
+                  label: "Échéance",
+                  render: (row) => formatDate(row.deadline)
+                },
+                {
+                  key: "target_amount",
+                  label: "Objectif",
+                  render: (row) =>
+                    row.target_amount === null ||
+                    row.target_amount === undefined
+                      ? "-"
+                      : `${formatMetricValue(row.target_amount)} ${
+                          row.target_unit || "USD"
+                        }`
+                },
+                { key: "first_step", label: "Première étape" },
+                { key: "success_metric", label: "Résultat attendu" }
+              ]}
+            />
+          ) : null}
+
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
             <TableCard
               title={`Risques (${risks.length})`}
@@ -815,8 +929,8 @@ export default function AIReasoningPage() {
           </div>
 
           <TableCard
-            title={`Recommandations CEO (${result.recommendations?.length || 0})`}
-            rows={(result.recommendations || []).map((item) => ({ item }))}
+            title={`Recommandations CEO (${recommendationRows.length})`}
+            rows={recommendationRows}
             emptyText="Aucune recommandation"
             columns={[{ key: "item", label: "Action recommandée" }]}
           />
