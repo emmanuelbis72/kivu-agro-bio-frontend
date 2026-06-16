@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import api from "../api/axios";
 import SectionTitle from "../components/ui/SectionTitle";
 import TableCard from "../components/ui/TableCard";
+import { saveBlobResponse } from "../utils/fileDownload";
 
 const allowedUnits = ["g", "kg", "ml", "l", "unit", "piece"];
 
@@ -9,6 +10,7 @@ const entryInitial = {
   warehouse_id: "",
   product_id: "",
   quantity: "",
+  quantity_unit: "kg",
   stock_form: "bulk",
   package_size: "",
   package_unit: "unit",
@@ -44,6 +46,7 @@ const adjustmentInitial = {
 const transferItemInitial = {
   product_id: "",
   quantity: "",
+  quantity_unit: "kg",
   stock_form: "bulk",
   package_size: "",
   package_unit: "unit",
@@ -97,6 +100,15 @@ const mixtureInitial = {
   components: [{ ...mixtureItemInitial }]
 };
 
+const today = new Date().toISOString().split("T")[0];
+const bulkReportInitial = {
+  warehouse_id: "",
+  product_id: "",
+  start_date: `${today.slice(0, 7)}-01`,
+  end_date: today,
+  unit: ""
+};
+
 function normalizeUnit(value, fallback = "unit") {
   const unit = String(value || fallback).trim().toLowerCase();
   return unit || fallback;
@@ -139,7 +151,7 @@ function getStockDisplay(row) {
     return `${quantity} paquet(s)`;
   }
 
-  return `${quantity} ${row.unit || "unit"}`;
+  return `${quantity} ${row.stock_unit || row.unit || "unit"}`;
 }
 
 function getMovementQuantityDisplay(row) {
@@ -153,7 +165,13 @@ function getMovementQuantityDisplay(row) {
     return `${quantity} paquet(s)${details}`;
   }
 
-  return `${quantity} ${row.unit || "piece"}`;
+  return `${quantity} ${row.stock_unit || row.unit || "unit"}`;
+}
+
+function formatStockQuantity(value, unit) {
+  return `${Number(value || 0).toLocaleString("fr-FR", {
+    maximumFractionDigits: 6
+  })} ${unit || ""}`.trim();
 }
 
 function buildSkuSuggestion(value) {
@@ -243,12 +261,19 @@ export default function StockPage() {
   const [loading, setLoading] = useState(true);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [transferDetailsLoading, setTransferDetailsLoading] = useState(false);
+  const [bulkReportLoading, setBulkReportLoading] = useState(false);
+  const [bulkReportExporting, setBulkReportExporting] = useState(false);
 
   const [selectedWarehouse, setSelectedWarehouse] = useState("");
   const [search, setSearch] = useState("");
   const [movementSearch, setMovementSearch] = useState("");
   const [transferSearch, setTransferSearch] = useState("");
   const [activeTab, setActiveTab] = useState("entry");
+  const [bulkReportFilters, setBulkReportFilters] = useState(bulkReportInitial);
+  const [bulkReport, setBulkReport] = useState({
+    summary_by_unit: [],
+    rows: []
+  });
 
   const [entryForm, setEntryForm] = useState(entryInitial);
   const [exitForm, setExitForm] = useState(exitInitial);
@@ -301,13 +326,15 @@ export default function StockPage() {
         productsRes,
         stockRes,
         movementsRes,
-        transfersRes
+        transfersRes,
+        bulkReportRes
       ] = await Promise.all([
         api.get("/warehouses"),
         api.get("/products"),
         api.get("/stock"),
         api.get("/stock/movements"),
-        api.get("/stock/transfers")
+        api.get("/stock/transfers"),
+        api.get("/stock/bulk-flow-report", { params: bulkReportInitial })
       ]);
 
       setWarehouses(warehousesRes.data.data || []);
@@ -315,6 +342,9 @@ export default function StockPage() {
       setStockRows(stockRes.data.data || []);
       setMovements(movementsRes.data.data || []);
       setTransfers(transfersRes.data.data || []);
+      setBulkReport(
+        bulkReportRes.data.data || { summary_by_unit: [], rows: [] }
+      );
     } catch (err) {
       setError(
         err?.response?.data?.message ||
@@ -375,6 +405,70 @@ export default function StockPage() {
     }
   }
 
+  async function fetchBulkReport(filters = bulkReportFilters) {
+    try {
+      setBulkReportLoading(true);
+      setError("");
+
+      const params = Object.fromEntries(
+        Object.entries(filters).filter(([, value]) => value !== "")
+      );
+      const response = await api.get("/stock/bulk-flow-report", { params });
+      setBulkReport(
+        response.data.data || { summary_by_unit: [], rows: [] }
+      );
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de charger le comparatif du stock en vrac."
+      );
+    } finally {
+      setBulkReportLoading(false);
+    }
+  }
+
+  function handleBulkReportFilterChange(event) {
+    const { name, value } = event.target;
+    setBulkReportFilters((prev) => ({ ...prev, [name]: value }));
+  }
+
+  function handleBulkReportSubmit(event) {
+    event.preventDefault();
+    fetchBulkReport();
+  }
+
+  async function handleBulkReportExport(format) {
+    try {
+      setBulkReportExporting(true);
+      setError("");
+
+      const params = Object.fromEntries(
+        Object.entries(bulkReportFilters).filter(([, value]) => value !== "")
+      );
+      const response = await api.get(
+        `/reports/bulk-stock-flow/export/${format}`,
+        {
+          params,
+          responseType: "blob"
+        }
+      );
+
+      saveBlobResponse(
+        response,
+        `stock-vrac.${format === "xlsx" ? "xlsx" : "pdf"}`
+      );
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Impossible de telecharger le rapport de stock."
+      );
+    } finally {
+      setBulkReportExporting(false);
+    }
+  }
+
   async function handleLoadTransferDetails(transferId) {
     try {
       setTransferDetailsLoading(true);
@@ -400,7 +494,18 @@ export default function StockPage() {
 
   function handleEntryChange(event) {
     const { name, value } = event.target;
-    setEntryForm((prev) => ({ ...prev, [name]: value }));
+    setEntryForm((prev) => {
+      const next = { ...prev, [name]: value };
+
+      if (name === "product_id") {
+        const product = products.find(
+          (item) => Number(item.id) === Number(value)
+        );
+        next.quantity_unit = product?.stock_unit || "unit";
+      }
+
+      return next;
+    });
   }
 
   function handleExitChange(event) {
@@ -425,6 +530,13 @@ export default function StockPage() {
         ...items[index],
         [field]: value
       };
+
+      if (field === "product_id") {
+        const product = products.find(
+          (item) => Number(item.id) === Number(value)
+        );
+        items[index].quantity_unit = product?.stock_unit || "unit";
+      }
 
       return {
         ...prev,
@@ -543,6 +655,10 @@ export default function StockPage() {
         warehouse_id: Number(entryForm.warehouse_id),
         product_id: Number(entryForm.product_id),
         quantity: Number(entryForm.quantity),
+        quantity_unit:
+          entryForm.stock_form === "bulk"
+            ? normalizeUnit(entryForm.quantity_unit)
+            : undefined,
         stock_form: entryForm.stock_form,
         package_size:
           entryForm.stock_form === "package"
@@ -582,6 +698,7 @@ export default function StockPage() {
       resetForms();
       await fetchStockByWarehouse(selectedWarehouse);
       await fetchMovements();
+      await fetchBulkReport();
     } catch (err) {
       setError(
         err?.response?.data?.message ||
@@ -691,6 +808,10 @@ export default function StockPage() {
       const normalizedItems = transferForm.items.map((item) => ({
         product_id: Number(item.product_id),
         quantity: Number(item.quantity),
+        quantity_unit:
+          item.stock_form === "bulk"
+            ? normalizeUnit(item.quantity_unit)
+            : undefined,
         stock_form: item.stock_form,
         package_size:
           item.stock_form === "package" ? Number(item.package_size) : undefined,
@@ -735,6 +856,7 @@ export default function StockPage() {
       await fetchStockByWarehouse(selectedWarehouse);
       await fetchMovements();
       await fetchTransfers();
+      await fetchBulkReport();
 
       if (response?.data?.data?.id) {
         await handleLoadTransferDetails(response.data.data.id);
@@ -1027,7 +1149,7 @@ export default function StockPage() {
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
             >
               <option value="">Sélectionner</option>
-              {finishedProducts.map((product) => (
+              {activeProducts.map((product) => (
                 <option key={product.id} value={product.id}>
                   {getProductLabel(product)}
                 </option>
@@ -1050,6 +1172,28 @@ export default function StockPage() {
               placeholder="Ex: 25"
             />
           </div>
+
+          {entryForm.stock_form === "bulk" ? (
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Unite saisie *
+              </label>
+              <select
+                name="quantity_unit"
+                value={entryForm.quantity_unit}
+                onChange={handleEntryChange}
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+              >
+                {allowedUnits
+                  .filter((unit) => unit !== "piece")
+                  .map((unit) => (
+                    <option key={unit} value={unit}>
+                      {unit}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          ) : null}
 
           {renderStockFormFields(entryForm, handleEntryChange)}
 
@@ -2083,6 +2227,33 @@ export default function StockPage() {
                   </select>
                 </div>
 
+                {item.stock_form === "bulk" ? (
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Unite saisie *
+                    </label>
+                    <select
+                      value={item.quantity_unit}
+                      onChange={(e) =>
+                        handleTransferItemChange(
+                          index,
+                          "quantity_unit",
+                          e.target.value
+                        )
+                      }
+                      className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                    >
+                      {allowedUnits
+                        .filter((unit) => unit !== "piece")
+                        .map((unit) => (
+                          <option key={unit} value={unit}>
+                            {unit}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                ) : null}
+
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-700">
                     Coût unitaire
@@ -2193,7 +2364,7 @@ export default function StockPage() {
     <div className="space-y-8">
       <SectionTitle
         title="Stock"
-        subtitle="Organisation professionnelle du stock par depot : les stocks visibles sont des produits finis et leurs mouvements"
+        subtitle="Suivi theorique du vrac entre approvisionnements et consommation des produits finis factures"
       />
 
       {error ? (
@@ -2209,7 +2380,9 @@ export default function StockPage() {
       ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-        Regle pratique : les produits visibles en stock et sur facture sont des produits finis vendables.
+        Les matieres premieres peuvent etre approvisionnees et transferees en kg ou en litres.
+        La facturation reste illimitee : les ingredients de la recette sont deduits du solde
+        theorique, qui peut devenir negatif pour signaler un besoin d approvisionnement.
       </div>
 
       <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
@@ -2237,6 +2410,235 @@ export default function StockPage() {
         </div>
 
         {renderStockForm()}
+      </div>
+
+      <div className="rounded-3xl bg-white p-6 shadow-soft border border-slate-100">
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-lg font-semibold text-slate-900">
+              Comparatif stock en vrac et consommation
+            </div>
+            <div className="mt-1 text-sm text-slate-500">
+              Entrees vrac moins consommation calculee sur les factures.
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => handleBulkReportExport("pdf")}
+              disabled={bulkReportExporting}
+              className="rounded-2xl border border-brand-300 px-4 py-2 text-sm font-semibold text-brand-700 disabled:opacity-60"
+            >
+              Rapport PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => handleBulkReportExport("xlsx")}
+              disabled={bulkReportExporting}
+              className="rounded-2xl border border-emerald-300 px-4 py-2 text-sm font-semibold text-emerald-700 disabled:opacity-60"
+            >
+              Rapport Excel
+            </button>
+          </div>
+        </div>
+
+        <form
+          onSubmit={handleBulkReportSubmit}
+          className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6"
+        >
+          <select
+            name="warehouse_id"
+            value={bulkReportFilters.warehouse_id}
+            onChange={handleBulkReportFilterChange}
+            className="rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-brand-500"
+          >
+            <option value="">Tous les depots</option>
+            {warehouses.map((warehouse) => (
+              <option key={warehouse.id} value={warehouse.id}>
+                {warehouse.name} - {warehouse.city}
+              </option>
+            ))}
+          </select>
+
+          <select
+            name="product_id"
+            value={bulkReportFilters.product_id}
+            onChange={handleBulkReportFilterChange}
+            className="rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-brand-500"
+          >
+            <option value="">Tous les articles</option>
+            {activeProducts.map((product) => (
+              <option key={product.id} value={product.id}>
+                {getProductLabel(product)}
+              </option>
+            ))}
+          </select>
+
+          <input
+            type="date"
+            name="start_date"
+            value={bulkReportFilters.start_date}
+            onChange={handleBulkReportFilterChange}
+            className="rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-brand-500"
+          />
+
+          <input
+            type="date"
+            name="end_date"
+            value={bulkReportFilters.end_date}
+            onChange={handleBulkReportFilterChange}
+            className="rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-brand-500"
+          />
+
+          <select
+            name="unit"
+            value={bulkReportFilters.unit}
+            onChange={handleBulkReportFilterChange}
+            className="rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-brand-500"
+          >
+            <option value="">Toutes les unites</option>
+            <option value="kg">Kilogrammes</option>
+            <option value="l">Litres</option>
+            <option value="unit">Unites</option>
+          </select>
+
+          <button
+            type="submit"
+            disabled={bulkReportLoading}
+            className="rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {bulkReportLoading ? "Chargement..." : "Appliquer"}
+          </button>
+        </form>
+
+        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+          {(bulkReport.summary_by_unit || []).map((summary) => (
+            <div
+              key={summary.reporting_unit}
+              className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
+            >
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Synthese en {summary.reporting_unit}
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <div className="text-slate-500">Entrees</div>
+                  <div className="font-bold text-emerald-700">
+                    {formatStockQuantity(
+                      summary.bulk_entries,
+                      summary.reporting_unit
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-500">Factures</div>
+                  <div className="font-bold text-red-700">
+                    {formatStockQuantity(
+                      summary.invoice_consumption,
+                      summary.reporting_unit
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-500">Consommation totale</div>
+                  <div className="font-bold text-slate-900">
+                    {formatStockQuantity(
+                      summary.total_consumption,
+                      summary.reporting_unit
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-500">Reste theorique</div>
+                  <div
+                    className={`font-bold ${
+                      Number(summary.theoretical_remaining || 0) < 0
+                        ? "text-red-700"
+                        : "text-brand-700"
+                    }`}
+                  >
+                    {formatStockQuantity(
+                      summary.theoretical_remaining,
+                      summary.reporting_unit
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <TableCard
+          title={`Flux en vrac (${bulkReport.rows?.length || 0})`}
+          rows={bulkReport.rows || []}
+          emptyText="Aucun flux en vrac pour ces filtres"
+          columns={[
+            { key: "warehouse_name", label: "Depot" },
+            { key: "product_name", label: "Article" },
+            { key: "sku", label: "SKU" },
+            {
+              key: "opening_stock",
+              label: "Ouverture",
+              render: (row) =>
+                formatStockQuantity(row.opening_stock, row.reporting_unit)
+            },
+            {
+              key: "bulk_entries",
+              label: "Entrees",
+              render: (row) =>
+                formatStockQuantity(row.bulk_entries, row.reporting_unit)
+            },
+            {
+              key: "transfer_in",
+              label: "Transferts +",
+              render: (row) =>
+                formatStockQuantity(row.transfer_in, row.reporting_unit)
+            },
+            {
+              key: "invoice_consumption",
+              label: "Factures",
+              render: (row) =>
+                formatStockQuantity(
+                  row.invoice_consumption,
+                  row.reporting_unit
+                )
+            },
+            {
+              key: "total_consumption",
+              label: "Conso. totale",
+              render: (row) =>
+                formatStockQuantity(
+                  row.total_consumption,
+                  row.reporting_unit
+                )
+            },
+            {
+              key: "theoretical_remaining",
+              label: "Reste theorique",
+              render: (row) => (
+                <span
+                  className={
+                    Number(row.theoretical_remaining || 0) < 0
+                      ? "font-bold text-red-700"
+                      : "font-bold text-emerald-700"
+                  }
+                >
+                  {formatStockQuantity(
+                    row.theoretical_remaining,
+                    row.reporting_unit
+                  )}
+                </span>
+              )
+            },
+            {
+              key: "shortage_quantity",
+              label: "Manquant",
+              render: (row) =>
+                formatStockQuantity(row.shortage_quantity, row.reporting_unit)
+            }
+          ]}
+        />
       </div>
 
       {selectedTransfer ? (

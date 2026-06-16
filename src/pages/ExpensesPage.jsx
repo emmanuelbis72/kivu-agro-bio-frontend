@@ -428,8 +428,19 @@ export default function ExpensesPage() {
   );
 
   const monthlyExpenseRows = useMemo(
-    () =>
-      monthLabels.map((monthLabel, monthIndex) => {
+    () => {
+      const currentDateParts = getExpenseDateParts(new Date());
+      const selectedYear = Number(analysisYear);
+      const lastVisibleMonth =
+        selectedYear < Number(currentDateParts?.year)
+          ? 12
+          : selectedYear === Number(currentDateParts?.year)
+            ? currentDateParts?.month || 12
+            : 0;
+
+      return monthLabels
+        .slice(0, lastVisibleMonth)
+        .map((monthLabel, monthIndex) => {
         const monthExpenses = yearlyExpenses.filter(
           (expense) => {
             const dateParts = getExpenseDateParts(expense.expense_date);
@@ -455,7 +466,8 @@ export default function ExpensesPage() {
         });
 
         return row;
-      }),
+        });
+    },
     [analysisYear, yearlyCategories, yearlyExpenses]
   );
 

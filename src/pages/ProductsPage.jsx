@@ -9,6 +9,14 @@ const productRoleOptions = [
   { value: "packaging_material", label: "Emballage" }
 ];
 
+const stockUnitOptions = [
+  { value: "kg", label: "Kilogramme (kg)" },
+  { value: "l", label: "Litre (l)" },
+  { value: "unit", label: "Unite" },
+  { value: "g", label: "Gramme (g)" },
+  { value: "ml", label: "Millilitre (ml)" }
+];
+
 const initialForm = {
   name: "",
   category: "",
@@ -16,6 +24,9 @@ const initialForm = {
   barcode: "",
   product_role: "finished_product",
   unit: "piece",
+  stock_unit: "unit",
+  pack_size: "",
+  pack_unit: "",
   cost_price: "",
   selling_price: "",
   alert_threshold: "",
@@ -31,6 +42,9 @@ function normalizeForm(form) {
     barcode: form.barcode.trim(),
     product_role: form.product_role.trim() || "finished_product",
     unit: form.unit.trim() || "piece",
+    stock_unit: form.stock_unit.trim() || "unit",
+    pack_size: form.pack_size === "" ? null : Number(form.pack_size),
+    pack_unit: form.pack_unit.trim() || null,
     cost_price: form.cost_price === "" ? 0 : Number(form.cost_price),
     selling_price: form.selling_price === "" ? 0 : Number(form.selling_price),
     alert_threshold:
@@ -121,6 +135,9 @@ export default function ProductsPage() {
       barcode: product.barcode || "",
       product_role: product.product_role || "finished_product",
       unit: product.unit || "piece",
+      stock_unit: product.stock_unit || "unit",
+      pack_size: product.pack_size ?? "",
+      pack_unit: product.pack_unit || "",
       cost_price: product.cost_price ?? "",
       selling_price: product.selling_price ?? "",
       alert_threshold: product.alert_threshold ?? "",
@@ -349,6 +366,59 @@ export default function ProductsPage() {
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
+              Unite de stock *
+            </label>
+            <select
+              name="stock_unit"
+              value={form.stock_unit}
+              onChange={handleChange}
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+            >
+              {stockUnitOptions.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Contenu d une unite vendue
+            </label>
+            <input
+              name="pack_size"
+              type="number"
+              min="0.000001"
+              step="0.000001"
+              value={form.pack_size}
+              onChange={handleChange}
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+              placeholder="Ex: 250"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Unite du contenu
+            </label>
+            <select
+              name="pack_unit"
+              value={form.pack_unit}
+              onChange={handleChange}
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+            >
+              <option value="">Non applicable</option>
+              {stockUnitOptions.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
               Seuil d alerte
             </label>
             <input
@@ -407,8 +477,8 @@ export default function ProductsPage() {
           </div>
 
           <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            Un produit fini peut etre vendu au client. Les matieres premieres et les emballages
-            servent au stock, a la production et aux transformations.
+            L unite de stock est la base de comptabilisation du vrac. Exemple : une matiere
+            premiere stockee en kg peut etre achetee en grammes et sera automatiquement convertie.
           </div>
 
           <div className="md:col-span-2 xl:col-span-3">
@@ -490,7 +560,8 @@ export default function ProductsPage() {
                     </span>
                   )
                 },
-                { key: "unit", label: "Unite" },
+                { key: "unit", label: "Unite vente" },
+                { key: "stock_unit", label: "Unite stock" },
                 {
                   key: "cost_price",
                   label: "Revient",

@@ -338,7 +338,7 @@ export default function ProductionPage() {
     <div className="space-y-8">
       <SectionTitle
         title="Production"
-        subtitle="Recettes de fabrication et batches de production en vrac. Le conditionnement en paquet se gère maintenant dans le module stock."
+        subtitle="Recettes utilisees pour calculer automatiquement les ingredients consommes lors de la facturation."
       />
 
       {error ? (
@@ -401,8 +401,9 @@ export default function ProductionPage() {
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Une recette définit quels produits sont consommés pour fabriquer un autre produit.
-              La sortie en paquets se fait ensuite dans le module stock via la transformation vrac vers paquet.
+              Chaque ligne indique la dose consommee pour une unite facturee du produit fini.
+              Si la recette contient trois ingredients, la facture deduit automatiquement les trois
+              quantites du depot apres conversion vers leur unite de stock.
             </div>
 
             <form
@@ -505,15 +506,15 @@ export default function ProductionPage() {
                   { key: "component_product_name", label: "Composant" },
                   { key: "component_product_sku", label: "SKU" },
                   {
-                    key: "component_unit",
-                    label: "Unité produit",
+                    key: "component_stock_unit",
+                    label: "Unité de stock",
                     render: (row) => (
                       <span
                         className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${unitBadgeClass(
-                          row.component_unit
+                          row.component_stock_unit || row.component_unit
                         )}`}
                       >
-                        {row.component_unit || "unit"}
+                        {row.component_stock_unit || row.component_unit || "unit"}
                       </span>
                     )
                   },

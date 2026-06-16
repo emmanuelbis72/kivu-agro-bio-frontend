@@ -46,6 +46,20 @@ function formatBoolean(value) {
   return value ? "Oui" : "Non";
 }
 
+function formatStockReconciliationStatus(value) {
+  return (
+    {
+      equilibre: "Equilibre",
+      manquant: "Manquant",
+      surplus: "Surplus",
+      conversion_error: "Erreur unite",
+      ok: "OK",
+      ecart: "Ecart",
+      non_comptabilise: "Non comptabilise"
+    }[value] || value || "-"
+  );
+}
+
 function getCollectionAlertClass(level) {
   return (
     {
@@ -96,6 +110,7 @@ function getInitialFilters() {
     payment_status: "all",
     alert_level: "all",
     customer_city: "",
+    unit: "",
     low_stock_only: false,
     detail_limit: 20
   };
@@ -1824,6 +1839,172 @@ const reportConfigs = {
     ],
     emptyText: "Aucune ligne de stock"
   },
+  bulk_stock_flow: {
+    exportKey: "bulk-stock-flow",
+    label: "Stock theorique en vrac",
+    description:
+      "Entrees en kg ou litres moins consommation calculee sur les recettes des produits finis factures.",
+    endpoint: "/reports/bulk-stock-flow",
+    buildParams: (filters) => ({
+      start_date: filters.start_date || undefined,
+      end_date: filters.end_date || undefined,
+      warehouse_id: filters.warehouse_id || undefined,
+      product_id: filters.product_id || undefined,
+      unit: filters.unit || undefined
+    }),
+    exportFilename: (filters) =>
+      `stock-vrac-${filters.start_date || "debut"}-${
+        filters.end_date || "fin"
+      }.csv`,
+    summaryCards: (summary) => [
+      { title: "Lignes", value: Number(summary.total_rows || 0) },
+      { title: "Soldes negatifs", value: Number(summary.shortage_rows || 0) },
+      { title: "Unite", value: summary.reporting_unit || "Toutes" }
+    ],
+    columns: [
+      { key: "warehouse_name", label: "Depot", csvValue: (row) => row.warehouse_name },
+      { key: "product_name", label: "Article vrac", csvValue: (row) => row.product_name },
+      { key: "sku", label: "SKU", csvValue: (row) => row.sku || "" },
+      { key: "reporting_unit", label: "Unite", csvValue: (row) => row.reporting_unit },
+      {
+        key: "opening_stock",
+        label: "Stock ouverture",
+        render: (row) => formatNumber(row.opening_stock),
+        csvValue: (row) => row.opening_stock
+      },
+      {
+        key: "bulk_entries",
+        label: "Entrees vrac",
+        render: (row) => formatNumber(row.bulk_entries),
+        csvValue: (row) => row.bulk_entries
+      },
+      {
+        key: "invoice_consumption",
+        label: "Consommation factures",
+        render: (row) => formatNumber(row.invoice_consumption),
+        csvValue: (row) => row.invoice_consumption
+      },
+      {
+        key: "total_consumption",
+        label: "Consommation totale",
+        render: (row) => formatNumber(row.total_consumption),
+        csvValue: (row) => row.total_consumption
+      },
+      {
+        key: "theoretical_remaining",
+        label: "Reste theorique",
+        render: (row) => formatNumber(row.theoretical_remaining),
+        csvValue: (row) => row.theoretical_remaining
+      },
+      {
+        key: "shortage_quantity",
+        label: "Manquant",
+        render: (row) => formatNumber(row.shortage_quantity),
+        csvValue: (row) => row.shortage_quantity
+      }
+    ],
+    emptyText: "Aucun mouvement de stock en vrac pour cette periode"
+  },
+  stock_reconciliation: {
+    exportKey: "stock-reconciliation",
+    label: "Rapprochement stock",
+    description:
+      "Compare le vrac entre en depot avec la consommation theorique des produits finis factures.",
+    endpoint: "/reports/stock-reconciliation",
+    buildParams: (filters) => ({
+      start_date: filters.start_date || undefined,
+      end_date: filters.end_date || undefined,
+      warehouse_id: filters.warehouse_id || undefined,
+      product_id: filters.product_id || undefined,
+      unit: filters.unit || undefined
+    }),
+    exportFilename: (filters) =>
+      `rapprochement-stock-${filters.start_date || "debut"}-${
+        filters.end_date || "fin"
+      }.csv`,
+    summaryCards: (summary) => [
+      { title: "Lignes", value: Number(summary.total_rows || 0) },
+      { title: "Manquants", value: Number(summary.shortage_rows || 0) },
+      { title: "Surplus", value: Number(summary.surplus_rows || 0) },
+      {
+        title: "Non comptabilises",
+        value: Number(summary.unrecorded_rows || 0)
+      },
+      {
+        title: "Sans recette",
+        value: Number(summary.unconfigured_invoice_items_count || 0)
+      }
+    ],
+    columns: [
+      { key: "warehouse_name", label: "Depot", csvValue: (row) => row.warehouse_name },
+      { key: "product_name", label: "Article vrac", csvValue: (row) => row.product_name },
+      { key: "sku", label: "SKU", csvValue: (row) => row.sku || "" },
+      { key: "reporting_unit", label: "Unite", csvValue: (row) => row.reporting_unit },
+      {
+        key: "invoices_count",
+        label: "Factures",
+        render: (row) => formatNumber(row.invoices_count),
+        csvValue: (row) => row.invoices_count
+      },
+      {
+        key: "finished_products_count",
+        label: "Produits finis",
+        render: (row) => formatNumber(row.finished_products_count),
+        csvValue: (row) => row.finished_products_count
+      },
+      {
+        key: "recipe_required_quantity",
+        label: "Conso. theorique",
+        render: (row) => formatNumber(row.recipe_required_quantity),
+        csvValue: (row) => row.recipe_required_quantity
+      },
+      {
+        key: "recorded_invoice_consumption",
+        label: "Conso. comptabilisee",
+        render: (row) => formatNumber(row.recorded_invoice_consumption),
+        csvValue: (row) => row.recorded_invoice_consumption
+      },
+      {
+        key: "bulk_entries",
+        label: "Entrees vrac",
+        render: (row) => formatNumber(row.bulk_entries),
+        csvValue: (row) => row.bulk_entries
+      },
+      {
+        key: "available_bulk",
+        label: "Vrac disponible",
+        render: (row) => formatNumber(row.available_bulk),
+        csvValue: (row) => row.available_bulk
+      },
+      {
+        key: "reconciliation_gap",
+        label: "Ecart vrac",
+        render: (row) => formatNumber(row.reconciliation_gap),
+        csvValue: (row) => row.reconciliation_gap
+      },
+      {
+        key: "recording_gap",
+        label: "Ecart compta.",
+        render: (row) => formatNumber(row.recording_gap),
+        csvValue: (row) => row.recording_gap
+      },
+      {
+        key: "status",
+        label: "Statut",
+        render: (row) => formatStockReconciliationStatus(row.status),
+        csvValue: (row) => formatStockReconciliationStatus(row.status)
+      },
+      {
+        key: "recording_status",
+        label: "Compta.",
+        render: (row) =>
+          formatStockReconciliationStatus(row.recording_status),
+        csvValue: (row) =>
+          formatStockReconciliationStatus(row.recording_status)
+      }
+    ],
+    emptyText: "Aucun rapprochement stock pour cette periode"
+  },
   cash_forecast: {
     exportKey: "cash-forecast",
     label: "Tresorerie previsionnelle",
@@ -1942,7 +2123,7 @@ const reportSections = [
   },
   {
     title: "Stock",
-    keys: ["stock_state"]
+    keys: ["stock_reconciliation", "bulk_stock_flow", "stock_state"]
   }
 ];
 
@@ -1970,6 +2151,7 @@ function buildFiltersFromSearchParams(searchParams) {
     "payment_status",
     "alert_level",
     "customer_city",
+    "unit",
     "detail_limit"
   ];
 
@@ -3139,6 +3321,91 @@ export default function ReportsPage() {
                   />
                   Afficher seulement les lignes sous seuil
                 </label>
+              </div>
+            </div>
+          ) : null}
+
+          {["bulk_stock_flow", "stock_reconciliation"].includes(activeReport) ? (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date debut
+                </label>
+                <input
+                  type="date"
+                  name="start_date"
+                  value={filters.start_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date fin
+                </label>
+                <input
+                  type="date"
+                  name="end_date"
+                  value={filters.end_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Depot
+                </label>
+                <select
+                  name="warehouse_id"
+                  value={filters.warehouse_id}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les depots</option>
+                  {sortedWarehouses.map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name} - {warehouse.city}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Article
+                </label>
+                <select
+                  name="product_id"
+                  value={filters.product_id}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les articles</option>
+                  {sortedProducts.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.name} {product.sku ? `(${product.sku})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Unite
+                </label>
+                <select
+                  name="unit"
+                  value={filters.unit}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Toutes</option>
+                  <option value="kg">kg</option>
+                  <option value="l">litres</option>
+                  <option value="unit">unites</option>
+                </select>
               </div>
             </div>
           ) : null}

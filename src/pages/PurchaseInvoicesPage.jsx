@@ -7,8 +7,11 @@ import TableCard from "../components/ui/TableCard";
 const initialItem = {
   product_id: "",
   quantity: "",
+  quantity_unit: "",
   unit_cost: ""
 };
+
+const quantityUnitOptions = ["g", "kg", "ml", "l", "unit"];
 
 const initialForm = {
   supplier_id: "",
@@ -219,6 +222,13 @@ export default function PurchaseInvoicesPage() {
         [field]: value
       };
 
+      if (field === "product_id") {
+        const product = products.find(
+          (item) => Number(item.id) === Number(value)
+        );
+        updatedItems[index].quantity_unit = product?.stock_unit || "";
+      }
+
       return {
         ...prev,
         items: updatedItems
@@ -289,6 +299,7 @@ export default function PurchaseInvoicesPage() {
       const normalizedItems = form.items.map((item) => ({
         product_id: Number(item.product_id),
         quantity: Number(item.quantity),
+        quantity_unit: item.quantity_unit || null,
         unit_cost: Number(item.unit_cost)
       }));
 
@@ -418,6 +429,7 @@ export default function PurchaseInvoicesPage() {
         items: (purchaseInvoice.items || []).map((item) => ({
           product_id: String(item.product_id || ""),
           quantity: String(Number(item.quantity || 0)),
+          quantity_unit: item.quantity_unit || "",
           unit_cost: String(Number(item.unit_cost || 0))
         }))
       });
@@ -718,7 +730,7 @@ export default function PurchaseInvoicesPage() {
               {form.items.map((item, index) => (
                 <div
                   key={index}
-                  className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 p-4 md:grid-cols-4"
+                  className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 p-4 md:grid-cols-5"
                 >
                   <div>
                     <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -755,6 +767,26 @@ export default function PurchaseInvoicesPage() {
                       className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
                       placeholder="1"
                     />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Unite de quantite
+                    </label>
+                    <select
+                      value={item.quantity_unit}
+                      onChange={(event) =>
+                        handleItemChange(index, "quantity_unit", event.target.value)
+                      }
+                      className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                    >
+                      <option value="">Unite du produit</option>
+                      {quantityUnitOptions.map((unit) => (
+                        <option key={unit} value={unit}>
+                          {unit}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
@@ -918,6 +950,11 @@ export default function PurchaseInvoicesPage() {
                 { key: "product_name", label: "Produit" },
                 { key: "sku", label: "SKU" },
                 { key: "quantity", label: "Qte" },
+                {
+                  key: "quantity_unit",
+                  label: "Unite",
+                  render: (row) => row.quantity_unit || row.stock_unit || "-"
+                },
                 {
                   key: "unit_cost",
                   label: "Cout unitaire",

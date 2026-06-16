@@ -389,30 +389,39 @@ export default function InvoicesPage() {
         ? await api.put(`/invoices/${editingInvoiceId}`, payload)
         : await api.post("/invoices", payload);
       const accounting = response?.data?.data?.accounting || null;
+      const unconfiguredRecipeCount = (
+        response?.data?.data?.invoice?.items || []
+      ).filter(
+        (item) => item.stock_consumption_mode === "unconfigured"
+      ).length;
+      const stockMessage =
+        unconfiguredRecipeCount > 0
+          ? ` ${unconfiguredRecipeCount} produit(s) sans recette : facture acceptee, consommation non calculee.`
+          : " La consommation en vrac a ete calculee sans bloquer la facture.";
 
       if (accounting?.status === "posted") {
         setSuccessMessage(
           editingInvoiceId
-            ? "Facture modifiee avec succes et ecriture comptable generee."
-            : "Facture creee avec succes et ecriture comptable generee."
+            ? `Facture modifiee avec succes et ecriture comptable generee.${stockMessage}`
+            : `Facture creee avec succes et ecriture comptable generee.${stockMessage}`
         );
       } else if (accounting?.status === "skipped") {
         setSuccessMessage(
           `${editingInvoiceId ? "Facture modifiee" : "Facture creee"} avec succes. Comptabilisation ignoree : ${
             accounting.reason || "parametrage manquant"
-          }.`
+          }.${stockMessage}`
         );
       } else if (accounting?.status === "error") {
         setSuccessMessage(
           `${editingInvoiceId ? "Facture modifiee" : "Facture creee"} avec succes. Comptabilisation en erreur : ${
             accounting.reason || "erreur inconnue"
-          }.`
+          }.${stockMessage}`
         );
       } else {
         setSuccessMessage(
           editingInvoiceId
-            ? "Facture modifiee avec succes."
-            : "Facture creee avec succes."
+            ? `Facture modifiee avec succes.${stockMessage}`
+            : `Facture creee avec succes.${stockMessage}`
         );
       }
 
@@ -980,6 +989,42 @@ export default function InvoicesPage() {
               }
             ]}
           />
+
+          <div className="mt-6">
+            <TableCard
+              title={`Consommation de stock post-facture (${
+                selectedInvoice.stock_consumptions?.length || 0
+              })`}
+              rows={selectedInvoice.stock_consumptions || []}
+              emptyText="Aucune consommation calculee : configure la recette de ce produit fini."
+              columns={[
+                { key: "sold_product_name", label: "Produit facture" },
+                { key: "component_product_name", label: "Article consomme" },
+                { key: "component_product_sku", label: "SKU" },
+                {
+                  key: "consumed_quantity",
+                  label: "Quantite consommee",
+                  render: (row) =>
+                    `${Number(row.consumed_quantity || 0)} ${
+                      row.consumed_unit || ""
+                    }`
+                },
+                {
+                  key: "recipe_quantity",
+                  label: "Dose recette",
+                  render: (row) =>
+                    row.recipe_quantity
+                      ? `${Number(row.recipe_quantity)} ${row.recipe_unit || ""}`
+                      : "Stock direct"
+                },
+                {
+                  key: "reversed_at",
+                  label: "Etat",
+                  render: (row) => (row.reversed_at ? "Annulee" : "Comptabilisee")
+                }
+              ]}
+            />
+          </div>
         </div>
       ) : null}
 
