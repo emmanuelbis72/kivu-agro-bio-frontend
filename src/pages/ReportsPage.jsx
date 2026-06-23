@@ -102,6 +102,7 @@ function getInitialFilters() {
     warehouse_id: "",
     customer_id: "",
     product_id: "",
+    movement_type: "",
     warehouse_ids: [],
     customer_ids: [],
     product_ids: [],
@@ -485,6 +486,83 @@ const reportConfigs = {
       }
     ],
     emptyText: "Aucun mouvement client sur cette periode"
+  },
+  customer_activity: {
+    exportKey: "customer-activity",
+    label: "Activite clients",
+    description:
+      "Savoir, pour une periode et un client, les factures emises et les paiements reellement recus.",
+    endpoint: "/reports/customer-activity",
+    buildParams: (filters, forExport = false) => ({
+      start_date: filters.start_date,
+      end_date: filters.end_date,
+      customer_id: filters.customer_id || undefined,
+      movement_type: filters.movement_type || undefined,
+      limit: forExport ? 5000 : 500
+    }),
+    exportFilename: (filters) =>
+      `activite-clients-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
+    summaryCards: (summary) => [
+      { title: "Clients", value: Number(summary.total_customers || 0) },
+      { title: "Factures", value: Number(summary.invoices_count || 0) },
+      { title: "Paiements", value: Number(summary.payments_count || 0) },
+      { title: "Total facture", value: formatMoney(summary.invoiced_amount) },
+      { title: "Total recu", value: formatMoney(summary.received_amount) },
+      { title: "Ecart periode", value: formatMoney(summary.period_difference) }
+    ],
+    columns: [
+      {
+        key: "movement_type",
+        label: "Type",
+        render: (row) => (
+          <span
+            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+              row.movement_type === "payment"
+                ? "bg-emerald-100 text-emerald-800"
+                : "bg-blue-100 text-blue-800"
+            }`}
+          >
+            {row.movement_type === "payment" ? "Paiement recu" : "Facture emise"}
+          </span>
+        ),
+        csvValue: (row) =>
+          row.movement_type === "payment" ? "Paiement recu" : "Facture emise"
+      },
+      {
+        key: "movement_date",
+        label: "Date",
+        render: (row) => formatDate(row.movement_date),
+        csvValue: (row) => formatDate(row.movement_date)
+      },
+      { key: "customer_name", label: "Client", csvValue: (row) => row.customer_name },
+      { key: "invoice_number", label: "Facture", csvValue: (row) => row.invoice_number },
+      { key: "reference", label: "Reference", csvValue: (row) => row.reference || "" },
+      { key: "description", label: "Designation", csvValue: (row) => row.description },
+      {
+        key: "invoiced_amount",
+        label: "Montant facture",
+        render: (row) =>
+          Number(row.invoiced_amount || 0) > 0
+            ? formatMoney(row.invoiced_amount)
+            : "-",
+        csvValue: (row) => row.invoiced_amount
+      },
+      {
+        key: "received_amount",
+        label: "Montant recu",
+        render: (row) =>
+          Number(row.received_amount || 0) > 0
+            ? formatMoney(row.received_amount)
+            : "-",
+        csvValue: (row) => row.received_amount
+      },
+      {
+        key: "payment_method",
+        label: "Mode",
+        csvValue: (row) => row.payment_method || ""
+      }
+    ],
+    emptyText: "Aucune facture ni aucun paiement recu sur cette periode"
   },
   sales_detail: {
     exportKey: "sales-detail",
@@ -1539,9 +1617,9 @@ const reportConfigs = {
   },
   product_ledger: {
     exportKey: "product-ledger",
-    label: "Compte courant produits",
+    label: "Historique ventes produits",
     description:
-      "Suivre produit par produit les lignes facturees, les quantites vendues, les clients, les depots et les factures sur une periode.",
+      "Savoir quel produit a ete vendu, a quel client, sur quelle facture et a quelle date.",
     endpoint: "/reports/product-ledger",
     buildParams: (filters, forExport = false) => ({
       start_date: filters.start_date,
@@ -1563,7 +1641,7 @@ const reportConfigs = {
       limit: forExport ? 5000 : 500
     }),
     exportFilename: (filters) =>
-      `compte-courant-produits-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
+      `historique-ventes-produits-${filters.start_date || "debut"}-${filters.end_date || "fin"}.csv`,
     summaryCards: (summary) => [
       { title: "Lignes", value: Number(summary.total_lines || 0) },
       { title: "Factures", value: Number(summary.total_invoices || 0) },
@@ -1644,7 +1722,7 @@ const reportConfigs = {
         csvValue: (row) => row.invoice_balance_due
       }
     ],
-    emptyText: "Aucune ligne de compte produit sur cette periode"
+    emptyText: "Aucune vente produit sur cette periode"
   },
   product_sales: {
     exportKey: "product-sales",
@@ -1905,6 +1983,91 @@ const reportConfigs = {
     ],
     emptyText: "Aucun mouvement de stock en vrac pour cette periode"
   },
+  product_consumption: {
+    exportKey: "product-consumption",
+    label: "Consommation produits",
+    description:
+      "Consommation post-facture par periode, depot, client et article, avec conversion en kilo.",
+    endpoint: "/reports/product-consumption",
+    buildParams: (filters) => ({
+      start_date: filters.start_date || undefined,
+      end_date: filters.end_date || undefined,
+      warehouse_id: filters.warehouse_id || undefined,
+      customer_id: filters.customer_id || undefined,
+      product_id: filters.product_id || undefined
+    }),
+    exportFilename: (filters) =>
+      `consommation-produits-${filters.start_date || "debut"}-${
+        filters.end_date || "fin"
+      }.csv`,
+    summaryCards: (summary) => [
+      { title: "Lignes", value: Number(summary.total_rows || 0) },
+      { title: "Factures", value: Number(summary.invoices_count || 0) },
+      { title: "Total kg", value: formatNumber(summary.total_consumed_kg) },
+      { title: "Convertibles kg", value: Number(summary.kg_rows || 0) },
+      {
+        title: "Non convertibles",
+        value: Number(summary.non_convertible_rows || 0)
+      }
+    ],
+    columns: [
+      { key: "warehouse_name", label: "Depot", csvValue: (row) => row.warehouse_name },
+      { key: "customer_name", label: "Client", csvValue: (row) => row.customer_name },
+      { key: "product_name", label: "Produit consomme", csvValue: (row) => row.product_name },
+      { key: "sku", label: "SKU", csvValue: (row) => row.sku || "" },
+      { key: "sold_product_name", label: "Produit facture", csvValue: (row) => row.sold_product_name },
+      {
+        key: "invoices_count",
+        label: "Factures",
+        render: (row) => formatNumber(row.invoices_count),
+        csvValue: (row) => row.invoices_count
+      },
+      {
+        key: "consumed_quantity",
+        label: "Qte origine",
+        render: (row) => formatNumber(row.consumed_quantity),
+        csvValue: (row) => row.consumed_quantity
+      },
+      { key: "consumed_unit", label: "Unite", csvValue: (row) => row.consumed_unit },
+      {
+        key: "consumed_reporting_quantity",
+        label: "Qte convertie",
+        render: (row) => formatNumber(row.consumed_reporting_quantity),
+        csvValue: (row) => row.consumed_reporting_quantity
+      },
+      { key: "reporting_unit", label: "Unite conv.", csvValue: (row) => row.reporting_unit },
+      {
+        key: "consumed_kg",
+        label: "Qte kg",
+        render: (row) =>
+          row.consumed_kg === null || row.consumed_kg === undefined
+            ? "-"
+            : formatNumber(row.consumed_kg),
+        csvValue: (row) => row.consumed_kg ?? ""
+      },
+      {
+        key: "kg_conversion_status",
+        label: "Conversion kg",
+        render: (row) =>
+          row.kg_conversion_status === "ok" ? "OK" : "Non convertible",
+        csvValue: (row) =>
+          row.kg_conversion_status === "ok" ? "OK" : "Non convertible"
+      },
+      {
+        key: "first_invoice_date",
+        label: "Debut",
+        render: (row) => formatDate(row.first_invoice_date),
+        csvValue: (row) => row.first_invoice_date
+      },
+      {
+        key: "last_invoice_date",
+        label: "Fin",
+        render: (row) => formatDate(row.last_invoice_date),
+        csvValue: (row) => row.last_invoice_date
+      }
+    ],
+    emptyText: "Aucune consommation produit pour cette periode"
+  },
   stock_reconciliation: {
     exportKey: "stock-reconciliation",
     label: "Rapprochement stock",
@@ -2108,6 +2271,7 @@ const reportSections = [
       "receipts_journal",
       "customer_aging",
       "supplier_aging",
+      "customer_activity",
       "customer_ledger"
     ]
   },
@@ -2118,12 +2282,18 @@ const reportSections = [
       "margin_by_customer",
       "sales_by_category",
       "sales_by_commercial",
+      "product_ledger",
       "product_sales"
     ]
   },
   {
     title: "Stock",
-    keys: ["stock_reconciliation", "bulk_stock_flow", "stock_state"]
+    keys: [
+      "product_consumption",
+      "stock_reconciliation",
+      "bulk_stock_flow",
+      "stock_state"
+    ]
   }
 ];
 
@@ -2146,6 +2316,7 @@ function buildFiltersFromSearchParams(searchParams) {
     "warehouse_id",
     "customer_id",
     "product_id",
+    "movement_type",
     "invoice_number",
     "invoice_status",
     "payment_status",
@@ -2697,7 +2868,7 @@ export default function ReportsPage() {
           ) : null}
 
           {activeReport === "customer_aging" || activeReport === "supplier_aging" ? (
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700">
                   Date d'arrete
@@ -2832,6 +3003,7 @@ export default function ReportsPage() {
                   ))}
                 </select>
               </div>
+
             </div>
           ) : null}
 
@@ -2904,8 +3076,12 @@ export default function ReportsPage() {
             </div>
           ) : null}
 
-          {activeReport === "customer_ledger" ? (
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+          {["customer_ledger", "customer_activity"].includes(activeReport) ? (
+            <div
+              className={`grid grid-cols-1 gap-5 md:grid-cols-2 ${
+                activeReport === "customer_activity" ? "xl:grid-cols-4" : "xl:grid-cols-3"
+              }`}
+            >
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700">
                   Date debut
@@ -2950,6 +3126,24 @@ export default function ReportsPage() {
                   ))}
                 </select>
               </div>
+
+              {activeReport === "customer_activity" ? (
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Type de mouvement
+                  </label>
+                  <select
+                    name="movement_type"
+                    value={filters.movement_type}
+                    onChange={handleFilterChange}
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                  >
+                    <option value="">Factures et paiements</option>
+                    <option value="invoice">Factures emises uniquement</option>
+                    <option value="payment">Paiements recus uniquement</option>
+                  </select>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -3321,6 +3515,93 @@ export default function ReportsPage() {
                   />
                   Afficher seulement les lignes sous seuil
                 </label>
+              </div>
+            </div>
+          ) : null}
+
+          {activeReport === "product_consumption" ? (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date debut
+                </label>
+                <input
+                  type="date"
+                  name="start_date"
+                  value={filters.start_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Date fin
+                </label>
+                <input
+                  type="date"
+                  name="end_date"
+                  value={filters.end_date}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Depot
+                </label>
+                <select
+                  name="warehouse_id"
+                  value={filters.warehouse_id}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les depots</option>
+                  {sortedWarehouses.map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name} - {warehouse.city}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Client
+                </label>
+                <select
+                  name="customer_id"
+                  value={filters.customer_id}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les clients</option>
+                  {sortedCustomers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.business_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Article consomme
+                </label>
+                <select
+                  name="product_id"
+                  value={filters.product_id}
+                  onChange={handleFilterChange}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500"
+                >
+                  <option value="">Tous les articles</option>
+                  {sortedProducts.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.name} {product.sku ? `(${product.sku})` : ""}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           ) : null}

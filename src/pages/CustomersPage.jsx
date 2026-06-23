@@ -127,6 +127,10 @@ export default function CustomersPage() {
     navigate(`/customer-accounts?customerId=${customer.id}`);
   }
 
+  function handleOpenActivity(customer) {
+    navigate(`/reports?report=customer_activity&customer_id=${customer.id}`);
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
 
@@ -652,6 +656,12 @@ export default function CustomersPage() {
                         className="rounded-xl border border-brand-300 px-3 py-2 text-xs font-semibold text-brand-700"
                       >
                         Compte courant
+                      </button>
+                      <button
+                        onClick={() => handleOpenActivity(row)}
+                        className="rounded-xl border border-emerald-300 px-3 py-2 text-xs font-semibold text-emerald-700"
+                      >
+                        Activite
                       </button>
                       <button
                         onClick={() => handleEdit(row)}

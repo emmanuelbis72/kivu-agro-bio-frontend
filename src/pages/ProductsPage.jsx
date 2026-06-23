@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import SectionTitle from "../components/ui/SectionTitle";
 import TableCard from "../components/ui/TableCard";
@@ -79,6 +80,7 @@ function getProductRoleBadge(value) {
 }
 
 export default function ProductsPage() {
+  const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitLoading, setSubmitLoading] = useState(false);
@@ -229,6 +231,10 @@ export default function ProductsPage() {
           "Impossible de supprimer ce produit."
       );
     }
+  }
+
+  function handleOpenSalesHistory(product) {
+    navigate(`/reports?report=product_ledger&product_ids=${product.id}`);
   }
 
   const filteredProducts = useMemo(() => {
@@ -592,6 +598,12 @@ export default function ProductsPage() {
                   label: "Actions",
                   render: (row) => (
                     <div className="flex gap-2">
+                      <button
+                        onClick={() => handleOpenSalesHistory(row)}
+                        className="rounded-xl border border-brand-300 px-3 py-2 text-xs font-semibold text-brand-700"
+                      >
+                        Historique ventes
+                      </button>
                       <button
                         onClick={() => handleEdit(row)}
                         className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"
