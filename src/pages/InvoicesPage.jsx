@@ -12,6 +12,7 @@ const initialItem = {
 
 const initialForm = {
   customer_id: "",
+  customer_title: "",
   warehouse_id: "",
   invoice_date: new Date().toISOString().split("T")[0],
   discount_amount: "",
@@ -84,6 +85,8 @@ export default function InvoicesPage() {
   const [warehouses, setWarehouses] = useState([]);
   const [products, setProducts] = useState([]);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [titleSaving, setTitleSaving] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [detailsLoading, setDetailsLoading] = useState(false);
@@ -161,6 +164,17 @@ export default function InvoicesPage() {
     fetchInitialData();
   }, []);
 
+  useEffect(() => { setTitleDraft(selectedInvoice?.customer_title || ""); }, [selectedInvoice?.id, selectedInvoice?.customer_title]);
+  async function saveTitle() {
+    setTitleSaving(true); setError("");
+    try {
+      const r = await api.patch(`/invoices/${selectedInvoice.id}/title`, {customer_title:titleDraft});
+      setSelectedInvoice((i) => ({...i, customer_title:r.data.data.customer_title}));
+      setInvoices((rows) => rows.map(i=>i.id===selectedInvoice.id?{...i,customer_title:r.data.data.customer_title}:i));
+      setSuccessMessage("Titre de facture enregistré.");
+    } catch (e) { setError(e.response?.data?.message || "Impossible d'enregistrer le titre."); }
+    finally { setTitleSaving(false); }
+  }
   function resetForm() {
     setForm({
       ...initialForm,
@@ -382,6 +396,7 @@ export default function InvoicesPage() {
           form.discount_amount === "" ? 0 : Number(form.discount_amount),
         tax_amount: form.tax_amount === "" ? 0 : Number(form.tax_amount),
         notes: form.notes.trim(),
+        customer_title: form.customer_title.trim(),
         items: normalizedItems
       };
 
@@ -486,6 +501,7 @@ export default function InvoicesPage() {
         discount_amount: String(Number(invoice.discount_amount || 0)),
         tax_amount: String(Number(invoice.tax_amount || 0)),
         notes: invoice.notes || "",
+        customer_title: invoice.customer_title || "",
         items: (invoice.items || []).map((item) => ({
           product_id: String(item.product_id || ""),
           quantity: String(Number(item.quantity || 0)),
@@ -552,6 +568,7 @@ export default function InvoicesPage() {
       [
         invoice.invoice_number,
         invoice.customer_name,
+        invoice.customer_title,
         invoice.status,
         invoice.warehouse_name,
         invoice.accounting_status
@@ -622,6 +639,27 @@ export default function InvoicesPage() {
                   </option>
                 ))}
               </select>
+              <div className="mt-4 rounded-2xl border border-brand-200 bg-brand-50 p-4">
+                <label htmlFor="customer-title" className="mb-2 block text-sm font-semibold text-slate-800">Titre facultatif</label>
+                <input
+                  id="customer-title"
+                  name="customer_title"
+                  maxLength={160}
+                  value={form.customer_title}
+                  onChange={handleFormChange}
+                  aria-describedby="customer-title-help"
+                  placeholder="Ex. Point de vente Gombe"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 outline-none focus:border-brand-500"
+                />
+                <p id="customer-title-help" className="mt-2 text-xs text-slate-600">Saisissez ici le point de vente à afficher sous le nom du client sur cette facture.</p>
+                {form.customer_title.trim() ? (
+                  <div aria-label="Aperçu du nom et du titre sur la facture" className="mt-3 rounded-xl bg-white p-3">
+                    <div className="mb-2 text-xs text-slate-500">Aperçu sur la facture</div>
+                    <div className="font-semibold text-slate-900">{selectedCustomer?.business_name || "Nom du client"}</div>
+                    <div className="mt-1 break-words text-sm text-slate-600">{form.customer_title.trim()}</div>
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             <div>
@@ -858,6 +896,9 @@ export default function InvoicesPage() {
               </div>
               <div className="mt-1 text-sm text-slate-500">
                 {selectedInvoice.customer_name} • {selectedInvoice.warehouse_name}
+                {selectedInvoice.customer_title ? <span className="mt-1 block text-sm text-slate-600">{selectedInvoice.customer_title}</span> : null}
+                <label htmlFor="title-existing" className="mt-3 block text-sm font-medium">Titre / point de vente (facultatif)</label>
+                <div className="mt-2 flex flex-wrap gap-2"><input id="title-existing" maxLength={160} value={titleDraft} onChange={e=>setTitleDraft(e.target.value)} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" /><button disabled={titleSaving} onClick={saveTitle} className="rounded-xl border border-slate-300 px-3 py-2 text-sm">{titleSaving?"Enregistrement…":"Enregistrer le titre"}</button></div>
               </div>
             </div>
 
@@ -1054,7 +1095,7 @@ export default function InvoicesPage() {
               emptyText="Aucune facture trouvee"
               columns={[
                 { key: "invoice_number", label: "Facture" },
-                { key: "customer_name", label: "Client" },
+                { key: "customer_name", label: "Client", render: (row) => <div>{row.customer_name}{row.customer_title ? <div className="mt-1 text-xs text-slate-500">{row.customer_title}</div> : null}</div> },
                 { key: "warehouse_name", label: "Depot" },
                 { key: "invoice_date", label: "Date" },
                 {

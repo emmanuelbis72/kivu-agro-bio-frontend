@@ -53,6 +53,7 @@ const primarySections = [
         icon: ScrollText
       },
       { to: "/invoices", label: "Factures", icon: FileText },
+      { to: "/home-deliveries", label: "Livraison à domicile", icon: Truck },
       { to: "/payments", label: "Paiements", icon: Wallet },
       { to: "/customers", label: "Clients", icon: Users }
     ]

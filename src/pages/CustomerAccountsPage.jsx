@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import api from "../api/axios";
 import SectionTitle from "../components/ui/SectionTitle";
 import StatCard from "../components/ui/StatCard";
@@ -484,6 +484,11 @@ export default function CustomerAccountsPage() {
 
   return (
     <div className="space-y-8">
+      {statement?.home_deliveries ? <div className="mb-5 rounded-2xl bg-green-50 p-5">
+        <div className="font-semibold">Ventes à domicile : {formatMoney(statement.home_deliveries.currencies.USD.sales)}</div>
+        <div className="mt-1 text-sm">{statement.home_deliveries.deliveries} livraison(s) identifiée(s), {statement.home_deliveries.needs_review} journée(s) à vérifier. Les ventes hors factures sont suivies dans le journal des livraisons.</div>
+        <Link className="mt-3 inline-block font-semibold text-green-800 underline" to={`/home-deliveries?customerId=${selectedCustomerId}`}>Ouvrir le journal des livraisons</Link>
+      </div> : null}
       <SectionTitle
         title="Comptes courants clients"
         subtitle="Consulte le solde, les factures et les paiements de chaque client dans un seul onglet."

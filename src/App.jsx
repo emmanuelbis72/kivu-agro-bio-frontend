@@ -22,6 +22,7 @@ import SuppliersPage from "./pages/SuppliersPage";
 import CustomerAccountsPage from "./pages/CustomerAccountsPage";
 import SupplierAccountsPage from "./pages/SupplierAccountsPage";
 import InvoicesPage from "./pages/InvoicesPage";
+import HomeDeliveriesPage from "./pages/HomeDeliveriesPage";
 import PurchaseOrdersPage from "./pages/PurchaseOrdersPage";
 import PurchaseInvoicesPage from "./pages/PurchaseInvoicesPage";
 import PaymentsPage from "./pages/PaymentsPage";
@@ -70,6 +71,7 @@ export default function App() {
           <Route path="customer-accounts" element={<CustomerAccountsPage />} />
           <Route path="supplier-accounts" element={<SupplierAccountsPage />} />
           <Route path="invoices" element={<InvoicesPage />} />
+          <Route path="home-deliveries" element={<HomeDeliveriesPage />} />
           <Route path="purchase-orders" element={<PurchaseOrdersPage />} />
           <Route path="purchase-invoices" element={<PurchaseInvoicesPage />} />
           <Route path="payments" element={<PaymentsPage />} />
